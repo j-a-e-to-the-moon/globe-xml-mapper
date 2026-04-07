@@ -554,6 +554,149 @@ namespace GlobeMapper.Services
 
         #endregion
 
+        #region 시트3 대형 블록 (3~228, 페이지번호 행 제외)
+
+        // 페이지번호 행 (복사에서 제외)
+        private static readonly int[] S3_PAGE_ROWS = { 2, 31, 64, 92, 119, 141, 162, 184, 205 };
+        private const int S3_BLOCK_START = 3;
+        private const int S3_BLOCK_END = 228;
+        private const int S3_PAGE_GAP = 2; // 페이지 간 간격
+
+        public void AddSheet3Page(string sheetName)
+        {
+            dynamic ws = _workbook.Sheets[sheetName];
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            var blockSize = S3_BLOCK_END - S3_BLOCK_START + 1; // 226행
+
+            // 삽입 위치
+            var insertRow = S3_BLOCK_END + 1 + (count - 1) * (blockSize + S3_PAGE_GAP) + S3_PAGE_GAP;
+
+            // 빈 행 삽입
+            dynamic insertRange = ws.Rows[$"{insertRow}:{insertRow + blockSize - 1}"];
+            insertRange.Insert();
+
+            // 원본 전체 복사
+            dynamic srcRange = ws.Range[ws.Cells[S3_BLOCK_START, 1], ws.Cells[S3_BLOCK_END, 18]];
+            dynamic dstRange = ws.Range[ws.Cells[insertRow, 1], ws.Cells[insertRow + blockSize - 1, 18]];
+            srcRange.Copy(dstRange);
+
+            // 행 높이 복사
+            for (int i = 0; i < blockSize; i++)
+                ws.Rows[insertRow + i].RowHeight = (double)ws.Rows[S3_BLOCK_START + i].RowHeight;
+
+            // 페이지번호 행 삭제 (새 블록 내에서)
+            foreach (var pageRow in S3_PAGE_ROWS)
+            {
+                var offset = pageRow - S3_BLOCK_START;
+                if (offset >= 0 && offset < blockSize)
+                {
+                    var targetRow = insertRow + offset;
+                    // 페이지번호 셀(R열) 값만 삭제
+                    ws.Cells[targetRow, 18].ClearContents();
+                }
+            }
+
+            // 데이터 셀 초기화
+            ClearDataCells(ws, insertRow, insertRow + blockSize - 1);
+
+            SetMetaInt(sheetName, "blockCount", count + 1);
+        }
+
+        public bool RemoveSheet3Page(string sheetName)
+        {
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            if (count <= 1) return false;
+
+            dynamic ws = _workbook.Sheets[sheetName];
+            var blockSize = S3_BLOCK_END - S3_BLOCK_START + 1;
+            var lastStart = S3_BLOCK_END + 1 + (count - 2) * (blockSize + S3_PAGE_GAP) + S3_PAGE_GAP;
+            var lastEnd = lastStart + blockSize - 1;
+
+            _app.DisplayAlerts = false;
+            try { ws.Rows[$"{lastStart - S3_PAGE_GAP}:{lastEnd}"].Delete(); }
+            finally { _app.DisplayAlerts = true; }
+
+            SetMetaInt(sheetName, "blockCount", count - 1);
+            return true;
+        }
+
+        public void ResetSheet3(string sheetName)
+        {
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            if (count > 1)
+            {
+                dynamic ws = _workbook.Sheets[sheetName];
+                var blockSize = S3_BLOCK_END - S3_BLOCK_START + 1;
+                var firstExtra = S3_BLOCK_END + 1 + S3_PAGE_GAP;
+                var lastEnd = S3_BLOCK_END + (count - 1) * (blockSize + S3_PAGE_GAP) + blockSize;
+
+                _app.DisplayAlerts = false;
+                try { ws.Rows[$"{firstExtra}:{lastEnd}"].Delete(); }
+                finally { _app.DisplayAlerts = true; }
+            }
+
+            dynamic sheet = _workbook.Sheets[sheetName];
+            ClearDataCells(sheet, S3_BLOCK_START, S3_BLOCK_END);
+            SetMetaInt(sheetName, "blockCount", 1);
+        }
+
+        // 시트3 내부 행 추가 (통합형피지배/결손금/제89조)
+        public void AddSheet3Row(string sheetName, string subKey, int firstDataRow)
+        {
+            dynamic ws = _workbook.Sheets[sheetName];
+            var metaKey = $"{sheetName}:{subKey}";
+            var count = GetMetaInt(metaKey, "blockCount", GetDefaultRowCount(subKey));
+            var insertRow = firstDataRow + count;
+
+            dynamic templateRow = ws.Rows[firstDataRow];
+            templateRow.Copy();
+            ws.Rows[insertRow].Insert();
+            dynamic destRow = ws.Rows[insertRow];
+            destRow.PasteSpecial(-4122); // xlPasteFormats
+            for (int c = 2; c <= 18; c++)
+            {
+                try { ws.Cells[insertRow, c].ClearContents(); } catch { }
+            }
+            _app.CutCopyMode = false;
+
+            SetMetaInt(metaKey, "blockCount", count + 1);
+        }
+
+        public bool RemoveSheet3Row(string sheetName, string subKey, int firstDataRow)
+        {
+            var metaKey = $"{sheetName}:{subKey}";
+            var count = GetMetaInt(metaKey, "blockCount", GetDefaultRowCount(subKey));
+            if (count <= 1) return false;
+
+            dynamic ws = _workbook.Sheets[sheetName];
+            var lastRow = firstDataRow + count - 1;
+
+            _app.DisplayAlerts = false;
+            try { ws.Rows[lastRow].Delete(); }
+            finally { _app.DisplayAlerts = true; }
+
+            SetMetaInt(metaKey, "blockCount", count - 1);
+            return true;
+        }
+
+        public int GetSheet3RowCount(string sheetName, string subKey)
+        {
+            return GetMetaInt($"{sheetName}:{subKey}", "blockCount", GetDefaultRowCount(subKey));
+        }
+
+        private static int GetDefaultRowCount(string subKey)
+        {
+            return subKey switch
+            {
+                "cfc" => 2,    // 통합형피지배 초기 2행
+                "carryback" => 4, // 결손금 소급공제 초기 4행
+                "art89" => 5,  // 제89조 초기 5행
+                _ => 1
+            };
+        }
+
+        #endregion
+
         #region 시트2 복합 블록 (3~23 + 26~54)
 
         // 시트2는 블록1(3~23) + 간격(24~25) + 블록2(26~54) = 총 52행이 한 세트
@@ -786,6 +929,8 @@ namespace GlobeMapper.Services
                 ("1.3.2.2", "1.3.2.2"),
                 ("1.3.3",   "1.3.3"),
                 ("1.4",     "1.4"),
+                ("2",       "2"),
+                ("3.1~3.2.3.2", "3.1~3.2.3.2"),
             };
 
             foreach (var (section, name) in sheetMap)
@@ -802,7 +947,7 @@ namespace GlobeMapper.Services
             }
 
             // 행 블록 카운트 초기값 (1.3.1, 1.3.2.1, 1.3.2.2)
-            var blockSheets = new[] { "1.3.1", "1.3.2.1", "1.3.2.2", "1.3.3", "1.4" };
+            var blockSheets = new[] { "1.3.1", "1.3.2.1", "1.3.2.2", "1.3.3", "1.4", "2", "3.1~3.2.3.2" };
             foreach (var name in blockSheets)
             {
                 bool exists = false;

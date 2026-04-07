@@ -286,6 +286,72 @@ namespace GlobeMapper
                 );
             }
 
+            else if (sheetName == "3.1~3.2.3.2")
+            {
+                // 시트3: 페이지 추가 + 3개 행 추가 영역
+                var pageCount = _excel.GetRowBlockCount(sheetName);
+                y = AddSectionLabel("글로벌최저한세 계산", $"{pageCount}페이지", y);
+                y = AddButtonRow(y,
+                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Page(sheetName); UpdateDynamicPanel(sheetName); }),
+                    ("−", Color.Tomato, () =>
+                    {
+                        if (pageCount <= 1) { MessageBox.Show("최소 1페이지는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                        if (MessageBox.Show("마지막 페이지를 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                        _excel.RemoveSheet3Page(sheetName);
+                        UpdateDynamicPanel(sheetName);
+                    })
+                );
+
+                y += 6;
+
+                // (c) 통합형피지배 (101행)
+                var cfcCount = _excel.GetSheet3RowCount(sheetName, "cfc");
+                y = AddSectionLabel("통합형피지배 행", $"{cfcCount}행", y);
+                y = AddButtonRow(y,
+                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Row(sheetName, "cfc", 101); UpdateDynamicPanel(sheetName); }),
+                    ("−", Color.Tomato, () =>
+                    {
+                        if (cfcCount <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                        _excel.RemoveSheet3Row(sheetName, "cfc", 101);
+                        UpdateDynamicPanel(sheetName);
+                    })
+                );
+
+                // (c) 결손금 소급공제 (144행)
+                var cbCount = _excel.GetSheet3RowCount(sheetName, "carryback");
+                y = AddSectionLabel("결손금 소급공제 행", $"{cbCount}행", y);
+                y = AddButtonRow(y,
+                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Row(sheetName, "carryback", 144); UpdateDynamicPanel(sheetName); }),
+                    ("−", Color.Tomato, () =>
+                    {
+                        if (cbCount <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                        _excel.RemoveSheet3Row(sheetName, "carryback", 144);
+                        UpdateDynamicPanel(sheetName);
+                    })
+                );
+
+                // (b) 제89조 (176행)
+                var artCount = _excel.GetSheet3RowCount(sheetName, "art89");
+                y = AddSectionLabel("제89조 행", $"{artCount}행", y);
+                y = AddButtonRow(y,
+                    ("+", Color.LimeGreen, () => { _excel.AddSheet3Row(sheetName, "art89", 176); UpdateDynamicPanel(sheetName); }),
+                    ("−", Color.Tomato, () =>
+                    {
+                        if (artCount <= 1) { MessageBox.Show("최소 1행은 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                        _excel.RemoveSheet3Row(sheetName, "art89", 176);
+                        UpdateDynamicPanel(sheetName);
+                    })
+                );
+
+                y += 4;
+                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                {
+                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    _excel.ResetSheet3(sheetName);
+                    UpdateDynamicPanel(sheetName);
+                });
+            }
+
             // 공통: 엑셀 종료
             y += 10;
             y = AddActionButton("엑셀 종료하기", Color.FromArgb(80, 80, 80), y, BtnCloseExcel_Click);
