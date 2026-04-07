@@ -86,6 +86,12 @@ mapper/
 - `MapWorkbook(filePath, globe)` — _META 기반 매핑 (Control Panel 방식)
 - `MapFolder(rootPath, globe)` — 디렉토리 기반 매핑 (하위 호환)
 
+### CE 행 블록 반복 (시트2)
+- 시트2에서 4~21행이 CE 1건 블록. [+]로 블록 복제, 각 블록의 O14셀에 "별첨N" 자동 갱신
+- 별첨 시트(`부표2 (2) 별첨`)에 별첨1, 별첨2... 섹션이 자동 추가/삭제
+- Mapping_1.3.2.1이 blockCount 기반으로 N개 CE 순회, 별첨N에서 Ownership 읽기
+- 별첨 시트에서 주주 행 추가/삭제는 Control Panel에서 별첨 번호 선택 후 [+][-]
+
 ## 새 섹션 추가 절차
 1. mapping JSON: `Resources/mappings/mapping_{섹션}.json`
 2. 매퍼 클래스: `Services/Mapping_{섹션}.cs` (MappingBase 상속)

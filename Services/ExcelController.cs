@@ -268,6 +268,218 @@ namespace GlobeMapper.Services
 
         #endregion
 
+        #region CE 블록 + 별첨 시트 연동
+
+        private const int CE_BLOCK_START = 4;
+        private const int CE_BLOCK_END = 21;
+        private const int CE_BLOCK_GAP = 2;
+        private const int CE_ATTACH_REF_ROW_OFFSET = 10; // 블록 내 O14 = 시작행+10
+
+        /// <summary>
+        /// CE 블록 추가: 시트2에서 행 블록 복제 + 별첨 시트에 섹션 추가.
+        /// </summary>
+        public void AddCeBlock(string ceSheetName, string attachSheetName)
+        {
+            // 1. 행 블록 복제
+            AddRowBlock(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP);
+
+            var count = GetRowBlockCount(ceSheetName);
+            var blockSize = CE_BLOCK_END - CE_BLOCK_START + 1;
+
+            // 2. 새 블록의 O14셀을 "별첨N"으로 갱신
+            dynamic ws = _workbook.Sheets[ceSheetName];
+            var newBlockStart = CE_BLOCK_END + 1 + (count - 2) * (blockSize + CE_BLOCK_GAP) + CE_BLOCK_GAP;
+            var refRow = newBlockStart + CE_ATTACH_REF_ROW_OFFSET;
+            ws.Cells[refRow, 15] = $"별첨{count}"; // O열 = 15
+
+            // 3. 별첨 시트에 섹션 추가
+            AddAttachSection(attachSheetName, count);
+        }
+
+        /// <summary>
+        /// 마지막 CE 블록 삭제 + 별첨 시트에서 해당 섹션 삭제.
+        /// </summary>
+        public bool RemoveCeBlock(string ceSheetName, string attachSheetName)
+        {
+            var count = GetRowBlockCount(ceSheetName);
+            if (count <= 1) return false;
+
+            RemoveRowBlock(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP);
+            RemoveAttachSection(attachSheetName, count);
+            return true;
+        }
+
+        /// <summary>
+        /// CE 시트 + 별첨 시트 초기화.
+        /// </summary>
+        public void ResetCeSheet(string ceSheetName, string attachSheetName)
+        {
+            var count = GetRowBlockCount(ceSheetName);
+
+            // 별첨 시트 초기화: 별첨2 이후 모두 삭제
+            if (count > 1)
+            {
+                for (int i = count; i >= 2; i--)
+                    RemoveAttachSection(attachSheetName, i);
+            }
+            // 별첨1 데이터 행 초기화
+            ResetAttachSection(attachSheetName, 1);
+
+            // CE 시트 초기화
+            ResetSheet(ceSheetName, CE_BLOCK_START, CE_BLOCK_END, CE_BLOCK_GAP);
+        }
+
+        public int GetCeBlockCount(string ceSheetName) => GetRowBlockCount(ceSheetName);
+
+        #endregion
+
+        #region 별첨 시트 관리
+
+        // 별첨 섹션 구조: 제목행(1) + 빈행(1) + 헤더행(1) + 데이터행(N) + 구분빈행(1)
+        private const int ATTACH_HEADER_ROWS = 3; // 제목 + 빈행 + 헤더
+        private const int ATTACH_SEPARATOR = 1;   // 구분 빈행
+        private const int ATTACH_INITIAL_DATA_ROWS = 1; // 초기 데이터 행 수
+
+        /// <summary>
+        /// 별첨 시트에서 별첨N 섹션의 시작 행을 찾음.
+        /// </summary>
+        private int FindAttachSectionStart(dynamic ws, int attachNum)
+        {
+            var row = 1;
+            var target = $"별첨{attachNum}";
+            for (int r = 1; r <= 500; r++)
+            {
+                string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
+                if (val == target) return r;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// 별첨 시트에서 별첨N 섹션의 데이터 행 수를 반환.
+        /// </summary>
+        public int GetOwnerRowCount(string attachSheetName, int attachNum)
+        {
+            dynamic ws = _workbook.Sheets[attachSheetName];
+            var start = FindAttachSectionStart(ws, attachNum);
+            if (start < 0) return 0;
+
+            var dataStart = start + ATTACH_HEADER_ROWS;
+            var count = 0;
+            for (int r = dataStart; r <= dataStart + 100; r++)
+            {
+                string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
+                // 빈 행이거나 다음 별첨 제목이면 종료
+                if (string.IsNullOrEmpty(val))
+                {
+                    // 다음 행도 빈지 확인 (별첨 간 구분 빈행)
+                    break;
+                }
+                count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 별첨 시트에서 별첨N에 주주 행 1개 추가.
+        /// </summary>
+        public void AddOwnerRow(string attachSheetName, int attachNum)
+        {
+            dynamic ws = _workbook.Sheets[attachSheetName];
+            var start = FindAttachSectionStart(ws, attachNum);
+            if (start < 0) return;
+
+            var dataStart = start + ATTACH_HEADER_ROWS;
+            var rowCount = GetOwnerRowCount(attachSheetName, attachNum);
+            var insertRow = dataStart + rowCount;
+
+            // 행 삽입
+            ws.Rows[insertRow].Insert();
+        }
+
+        /// <summary>
+        /// 별첨 시트에서 별첨N의 마지막 주주 행 삭제.
+        /// </summary>
+        public bool RemoveOwnerRow(string attachSheetName, int attachNum)
+        {
+            var rowCount = GetOwnerRowCount(attachSheetName, attachNum);
+            if (rowCount <= 0) return false;
+
+            dynamic ws = _workbook.Sheets[attachSheetName];
+            var start = FindAttachSectionStart(ws, attachNum);
+            var lastDataRow = start + ATTACH_HEADER_ROWS + rowCount - 1;
+
+            _app.DisplayAlerts = false;
+            try { ws.Rows[lastDataRow].Delete(); }
+            finally { _app.DisplayAlerts = true; }
+            return true;
+        }
+
+        /// <summary>
+        /// 별첨 시트에 새 별첨N 섹션 추가.
+        /// </summary>
+        private void AddAttachSection(string attachSheetName, int attachNum)
+        {
+            dynamic ws = _workbook.Sheets[attachSheetName];
+
+            // 마지막 사용 행 찾기
+            int lastRow = (int)ws.UsedRange.Row + (int)ws.UsedRange.Rows.Count;
+
+            var startRow = lastRow + 1;
+            ws.Cells[startRow, 2] = $"별첨{attachNum}";
+            ws.Cells[startRow + 2, 2] = "유형";
+            ws.Cells[startRow + 2, 3] = "납세자번호";
+            ws.Cells[startRow + 2, 4] = "소유지분(%)";
+        }
+
+        /// <summary>
+        /// 별첨 시트에서 마지막 별첨 섹션 삭제.
+        /// </summary>
+        private void RemoveAttachSection(string attachSheetName, int attachNum)
+        {
+            dynamic ws = _workbook.Sheets[attachSheetName];
+            var start = FindAttachSectionStart(ws, attachNum);
+            if (start < 0) return;
+
+            // 해당 섹션 끝 찾기: 다음 "별첨" 또는 사용범위 끝
+            int end = start;
+            for (int r = start + 1; r <= start + 200; r++)
+            {
+                string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
+                if (val != null && val.StartsWith("별첨") && val != $"별첨{attachNum}")
+                {
+                    end = r - 1;
+                    break;
+                }
+                end = r;
+            }
+
+            _app.DisplayAlerts = false;
+            try { ws.Rows[$"{start}:{end}"].Delete(); }
+            finally { _app.DisplayAlerts = true; }
+        }
+
+        /// <summary>
+        /// 별첨1 데이터만 초기화 (구조 유지).
+        /// </summary>
+        private void ResetAttachSection(string attachSheetName, int attachNum)
+        {
+            dynamic ws = _workbook.Sheets[attachSheetName];
+            var start = FindAttachSectionStart(ws, attachNum);
+            if (start < 0) return;
+
+            var dataStart = start + ATTACH_HEADER_ROWS;
+            var rowCount = GetOwnerRowCount(attachSheetName, attachNum);
+            if (rowCount > 0)
+            {
+                _app.DisplayAlerts = false;
+                try { ws.Rows[$"{dataStart}:{dataStart + rowCount - 1}"].Delete(); }
+                finally { _app.DisplayAlerts = true; }
+            }
+        }
+
+        #endregion
+
         #region 메타 시트 관리
 
         private void EnsureMetaSheet()

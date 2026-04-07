@@ -25,6 +25,12 @@ namespace GlobeMapper
         private const int UPE_BLOCK_END = 29;
         private const int UPE_BLOCK_GAP = 2;
 
+        // 별첨 시트 이름
+        private const string ATTACH_SHEET_NAME = "부표2 (2) 별첨";
+
+        // 별첨 번호 상태 (별첨 시트 활성 시)
+        private int _selectedAttachNum = 1;
+
         public ControlPanelForm(ExcelController excel)
         {
             _excel = excel;
@@ -152,19 +158,48 @@ namespace GlobeMapper
                     UpdateDynamicPanel(sheetName);
                 });
             }
-            else if (sheetName != null && IsSheetSection("1.3.2.1", sheetName))
+            else if (sheetName != null && sheetName.Contains("(2)"))
             {
-                // CE 시트: 시트 추가/삭제
-                var count = _excel.GetSheetCount("1.3.2.1");
+                // 시트 2: CE 행 블록 추가/삭제 + 시트 초기화
+                var count = _excel.GetCeBlockCount(sheetName);
                 y = AddSectionLabel("1.3.2.1 구성기업 (CE)", $"{count}개", y);
                 y = AddButtonRow(y,
-                    ("+", Color.LimeGreen, () => { _excel.AddSheet("1.3.2.1"); UpdateDynamicPanel(sheetName); }),
+                    ("+", Color.LimeGreen, () => { _excel.AddCeBlock(sheetName, ATTACH_SHEET_NAME); UpdateDynamicPanel(sheetName); }),
                     ("−", Color.Tomato, () =>
                     {
                         if (count <= 1) { MessageBox.Show("최소 1개는 유지해야 합니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                        var sheets = _excel.GetSectionSheets("1.3.2.1");
-                        if (MessageBox.Show($"'{sheets[^1]}' 시트를 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-                        _excel.RemoveSheet("1.3.2.1");
+                        if (MessageBox.Show("마지막 CE 블록을 삭제하시겠습니까?", "확인", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+                        _excel.RemoveCeBlock(sheetName, ATTACH_SHEET_NAME);
+                        UpdateDynamicPanel(sheetName);
+                    })
+                );
+                y += 4;
+                y = AddActionButton("시트 초기화", Color.FromArgb(100, 100, 100), y, () =>
+                {
+                    if (MessageBox.Show("시트를 초기 상태로 되돌리시겠습니까?\n모든 CE 및 별첨 데이터가 삭제됩니다.", "확인", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    _excel.ResetCeSheet(sheetName, ATTACH_SHEET_NAME);
+                    UpdateDynamicPanel(sheetName);
+                });
+            }
+            else if (sheetName != null && sheetName.Contains("별첨"))
+            {
+                // 별첨 시트: 별첨 번호 선택 + 주주 행 추가/삭제
+                var ceCount = _excel.GetCeBlockCount("국조53부표2 (2)");
+                if (_selectedAttachNum > ceCount) _selectedAttachNum = 1;
+
+                // 별첨 번호 선택 행
+                y = AddAttachSelector(y, ceCount, sheetName);
+                y += 4;
+
+                // 주주 행 관리
+                var ownerCount = _excel.GetOwnerRowCount(sheetName, _selectedAttachNum);
+                y = AddSectionLabel($"별첨{_selectedAttachNum} 주주 행", $"{ownerCount}행", y);
+                y = AddButtonRow(y,
+                    ("+", Color.LimeGreen, () => { _excel.AddOwnerRow(sheetName, _selectedAttachNum); UpdateDynamicPanel(sheetName); }),
+                    ("−", Color.Tomato, () =>
+                    {
+                        if (ownerCount <= 0) { MessageBox.Show("삭제할 행이 없습니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                        _excel.RemoveOwnerRow(sheetName, _selectedAttachNum);
                         UpdateDynamicPanel(sheetName);
                     })
                 );
@@ -220,6 +255,59 @@ namespace GlobeMapper
                 ForeColor = Color.White, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold)
             });
             return y + 24;
+        }
+
+        private int AddAttachSelector(int y, int maxNum, string sheetName)
+        {
+            var lbl = new Label
+            {
+                Text = "별첨 번호:",
+                Location = new Point(8, y + 4), AutoSize = true,
+                ForeColor = Color.LightGray, Font = new Font("Segoe UI", 8.5f)
+            };
+            _dynamicPanel.Controls.Add(lbl);
+
+            var btnPrev = MakeSmallButton("◀", Color.White, new Point(90, y), () =>
+            {
+                if (_selectedAttachNum > 1) { _selectedAttachNum--; UpdateDynamicPanel(sheetName); }
+            });
+
+            var txtNum = new TextBox
+            {
+                Text = _selectedAttachNum.ToString(),
+                Location = new Point(120, y), Size = new Size(35, 24),
+                TextAlign = HorizontalAlignment.Center,
+                BackColor = Color.FromArgb(60, 60, 60),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = new Font("Segoe UI", 9)
+            };
+            txtNum.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    if (int.TryParse(txtNum.Text, out var n) && n >= 1 && n <= maxNum)
+                    { _selectedAttachNum = n; UpdateDynamicPanel(sheetName); }
+                    else
+                    { txtNum.Text = _selectedAttachNum.ToString(); }
+                    e.SuppressKeyPress = true;
+                }
+            };
+
+            var btnNext = MakeSmallButton("▶", Color.White, new Point(160, y), () =>
+            {
+                if (_selectedAttachNum < maxNum) { _selectedAttachNum++; UpdateDynamicPanel(sheetName); }
+            });
+
+            var lblMax = new Label
+            {
+                Text = $"/ {maxNum}",
+                Location = new Point(190, y + 4), AutoSize = true,
+                ForeColor = Color.Gray, Font = new Font("Segoe UI", 8f)
+            };
+
+            _dynamicPanel.Controls.AddRange(new Control[] { btnPrev, txtNum, btnNext, lblMax });
+            return y + 30;
         }
 
         private int AddButtonRow(int y, (string text, Color color, Action click) btn1, (string text, Color color, Action click) btn2)
