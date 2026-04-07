@@ -34,7 +34,7 @@ namespace GlobeMapper.Services
         };
 
         // 별첨 시트 이름
-        private const string ATTACH_SHEET = "부표2 (2) 별첨";
+        private const string ATTACH_SHEET = "1.3.2.1 첨부";
 
         public Mapping_1_3_2_1() : base("mapping_1.3.2.1.json") { }
 
@@ -149,13 +149,13 @@ namespace GlobeMapper.Services
                     break;
 
                 // 다음 별첨 제목이면 종료
-                if (typeVal != null && typeVal.StartsWith("별첨")) break;
+                if (typeVal != null && typeVal.StartsWith("첨부")) break;
 
                 var ownership = new Globe.CorporateStructureTypeCeOwnership();
 
                 if (!string.IsNullOrEmpty(typeVal))
                     SetEnum<Globe.OwnershipTypeEnumType>(typeVal, v => ownership.OwnershipType = v,
-                        errors, fileName, new MappingEntry { Cell = $"별첨!B{dataRow}", Label = $"별첨{attachNum} 유형" });
+                        errors, fileName, new MappingEntry { Cell = $"첨부!B{dataRow}", Label = $"첨부{attachNum} 유형" });
 
                 if (!string.IsNullOrEmpty(tinVal))
                     ownership.Tin = new Globe.TinType { Value = tinVal };
@@ -170,7 +170,7 @@ namespace GlobeMapper.Services
 
         private static int FindAttachStart(IXLWorksheet ws, int attachNum)
         {
-            var target = $"별첨{attachNum}";
+            var target = $"첨부{attachNum}";
             for (int r = 1; r <= 500; r++)
             {
                 var val = ws.Cell(r, 2).GetString()?.Trim();

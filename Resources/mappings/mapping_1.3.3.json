@@ -1,0 +1,11 @@
+{
+  "description": "기업구조 변동 (AdditionalDataPoint)",
+  "sheetName": "1.3.3",
+  "repeatable": false,
+  "sections": {
+    "1.3.3": {
+      "description": "기업구조 변동 테이블 — 행 반복, blockCount 기반",
+      "mappings": []
+    }
+  }
+}

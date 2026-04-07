@@ -7,14 +7,14 @@
     "1.3.1": {
       "description": "최종모기업",
       "mappings": [
-        { "cell": "J22", "target": "Upe.OtherUpe.Id.ResCountryCode",   "type": "enum:CountryCodeType",          "label": "1. 최종모기업 소재지국" },
-        { "cell": "J23", "target": "Upe.OtherUpe.Id.Rules",            "type": "enum:IdTypeRulesEnumType",       "label": "2. 적용가능규칙", "multi": true },
-        { "cell": "J24", "target": "Upe.OtherUpe.Id.Name",             "type": "string",                         "label": "3. 최종모기업 상호" },
-        { "cell": "J25", "target": "Upe.OtherUpe.Id.Tin.Value",        "type": "string",                         "label": "4. 최종모기업 납세자번호", "multi": true },
-        { "cell": "J26", "target": "Upe.OtherUpe.Id.ReceivingTin",     "type": "string",                         "label": "5. 신고접수국가 납세자번호" },
-        { "cell": "J27", "target": "Upe.OtherUpe.Id.GlobeStatus",      "type": "enum:IdTypeGloBeStatusEnumType", "label": "6. 글로벌최저한세 목적상 기업유형", "multi": true },
-        { "cell": "J28", "target": "Upe.ExcludedUpe.ExcludedUpeStatus","type": "enum:ExcludedUpeEnumType",       "label": "7. 제외기업 유형" },
-        { "cell": "J29", "target": "Upe.ExcludedUpe.Art1035",          "type": "enum:CountryCodeType",           "label": "8. 시행령 제103조제4항 적용 국가 해당 여부" }
+        { "cell": "J4",  "target": "Upe.OtherUpe.Id.ResCountryCode",   "type": "enum:CountryCodeType",          "label": "1. 최종모기업 소재지국" },
+        { "cell": "J5",  "target": "Upe.OtherUpe.Id.Rules",            "type": "enum:IdTypeRulesEnumType",       "label": "2. 적용가능규칙", "multi": true },
+        { "cell": "J6",  "target": "Upe.OtherUpe.Id.Name",             "type": "string",                         "label": "3. 최종모기업 상호" },
+        { "cell": "J7",  "target": "Upe.OtherUpe.Id.Tin.Value",        "type": "string",                         "label": "4. 최종모기업 납세자번호", "multi": true },
+        { "cell": "J8",  "target": "Upe.OtherUpe.Id.ReceivingTin",     "type": "string",                         "label": "5. 신고접수국가 납세자번호" },
+        { "cell": "J9",  "target": "Upe.OtherUpe.Id.GlobeStatus",      "type": "enum:IdTypeGloBeStatusEnumType", "label": "6. 글로벌최저한세 목적상 기업유형", "multi": true },
+        { "cell": "J10", "target": "Upe.ExcludedUpe.ExcludedUpeStatus", "type": "enum:ExcludedUpeEnumType",       "label": "7. 제외기업 유형" },
+        { "cell": "J11", "target": "Upe.ExcludedUpe.Art1035",          "type": "enum:CountryCodeType",           "label": "8. 시행령 제103조제4항 적용 국가 해당 여부" }
       ]
     }
   }

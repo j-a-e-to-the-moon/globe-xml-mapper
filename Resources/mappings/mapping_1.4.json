@@ -1,0 +1,11 @@
+{
+  "description": "글로벌최저한세 정보 요약 (Summary)",
+  "sheetName": "1.4",
+  "repeatable": false,
+  "sections": {
+    "1.4": {
+      "description": "정보 요약 테이블 — 행 반복, blockCount 기반",
+      "mappings": []
+    }
+  }
+}

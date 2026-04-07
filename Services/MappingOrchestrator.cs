@@ -15,6 +15,8 @@ namespace GlobeMapper.Services
             { "1.3.1",    () => new Mapping_1_3_1() },
             { "1.3.2.1",  () => new Mapping_1_3_2_1() },
             { "1.3.2.2",  () => new Mapping_1_3_2_2() },
+            // 1.3.3은 XML에 포함하지 않음 (AdditionalDataPoint 미사용)
+            { "1.4",      () => new Mapping_1_4() },
         };
 
         /// <summary>
@@ -30,7 +32,7 @@ namespace GlobeMapper.Services
             // _META 시트에서 섹션-시트 매핑 읽기
             if (!workbook.TryGetWorksheet(ExcelController.MetaSheetName, out var metaWs))
             {
-                errors.Add("_META 숨김시트를 찾을 수 없습니다. Control Panel에서 파일을 열어주세요.");
+                errors.Add("_META 숨김시트를 찾을 수 없습니다. Control Panel에서 파일을 먼저 열어주세요.");
                 return errors;
             }
 

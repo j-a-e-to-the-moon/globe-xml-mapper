@@ -74,7 +74,25 @@ namespace GlobeMapper.Services
         public void CloseWithSavePrompt()
         {
             if (_workbook == null) return;
-            try { _workbook.Close(SaveChanges: true); }
+            try
+            {
+                bool saved = (bool)_workbook.Saved;
+                if (!saved)
+                {
+                    var result = System.Windows.Forms.MessageBox.Show(
+                        "변경사항이 있습니다. 저장하시겠습니까?",
+                        "저장 확인",
+                        System.Windows.Forms.MessageBoxButtons.YesNoCancel,
+                        System.Windows.Forms.MessageBoxIcon.Question);
+
+                    if (result == System.Windows.Forms.DialogResult.Cancel) return;
+                    _workbook.Close(SaveChanges: result == System.Windows.Forms.DialogResult.Yes);
+                }
+                else
+                {
+                    _workbook.Close(SaveChanges: false);
+                }
+            }
             catch { }
             finally { QuitApp(); }
         }
@@ -106,6 +124,12 @@ namespace GlobeMapper.Services
                 ws.Cells[insertRow + blockSize - 1, 18]
             ];
             sourceRange.Copy(destRange);
+
+            // 행 높이 복사
+            for (int i = 0; i < blockSize; i++)
+            {
+                ws.Rows[insertRow + i].RowHeight = (double)ws.Rows[sourceStartRow + i].RowHeight;
+            }
 
             // 데이터 셀 초기화 (값만 지우기, 서식 유지)
             ClearDataCells(ws, insertRow, insertRow + blockSize - 1);
@@ -268,7 +292,7 @@ namespace GlobeMapper.Services
 
         #endregion
 
-        #region CE 블록 + 별첨 시트 연동
+        #region CE 블록 + 첨부 시트 연동
 
         private const int CE_BLOCK_START = 4;
         private const int CE_BLOCK_END = 21;
@@ -290,7 +314,7 @@ namespace GlobeMapper.Services
             dynamic ws = _workbook.Sheets[ceSheetName];
             var newBlockStart = CE_BLOCK_END + 1 + (count - 2) * (blockSize + CE_BLOCK_GAP) + CE_BLOCK_GAP;
             var refRow = newBlockStart + CE_ATTACH_REF_ROW_OFFSET;
-            ws.Cells[refRow, 15] = $"별첨{count}"; // O열 = 15
+            ws.Cells[refRow, 15] = $"첨부{count}"; // O열 = 15
 
             // 3. 별첨 시트에 섹션 추가
             AddAttachSection(attachSheetName, count);
@@ -346,7 +370,7 @@ namespace GlobeMapper.Services
         private int FindAttachSectionStart(dynamic ws, int attachNum)
         {
             var row = 1;
-            var target = $"별첨{attachNum}";
+            var target = $"첨부{attachNum}";
             for (int r = 1; r <= 500; r++)
             {
                 string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
@@ -366,15 +390,29 @@ namespace GlobeMapper.Services
 
             var dataStart = start + ATTACH_HEADER_ROWS;
             var count = 0;
-            for (int r = dataStart; r <= dataStart + 100; r++)
+            for (int r = dataStart; r <= dataStart + 200; r++)
             {
-                string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
-                // 빈 행이거나 다음 별첨 제목이면 종료
-                if (string.IsNullOrEmpty(val))
+                string b = ws.Cells[r, 2].Value?.ToString()?.Trim();
+
+                // 다음 별첨 제목이면 종료
+                if (b != null && b.StartsWith("첨부")) break;
+
+                // 값이 있거나 테두리가 있으면 데이터 행으로 카운트
+                string c = ws.Cells[r, 3].Value?.ToString()?.Trim();
+                string d = ws.Cells[r, 4].Value?.ToString()?.Trim();
+                bool hasValue = !string.IsNullOrEmpty(b) || !string.IsNullOrEmpty(c) || !string.IsNullOrEmpty(d);
+
+                // 테두리 확인 (B열 기준)
+                bool hasBorder = false;
+                try
                 {
-                    // 다음 행도 빈지 확인 (별첨 간 구분 빈행)
-                    break;
+                    dynamic borders = ws.Cells[r, 2].Borders;
+                    // xlEdgeBottom = 9
+                    hasBorder = borders[9].LineStyle != -4142; // -4142 = xlNone
                 }
+                catch { }
+
+                if (!hasValue && !hasBorder) break;
                 count++;
             }
             return count;
@@ -393,8 +431,18 @@ namespace GlobeMapper.Services
             var rowCount = GetOwnerRowCount(attachSheetName, attachNum);
             var insertRow = dataStart + rowCount;
 
-            // 행 삽입
+            // 첫 데이터 행(테두리 템플릿)을 복사하여 삽입
+            dynamic templateRow = ws.Rows[dataStart];
+            templateRow.Copy();
             ws.Rows[insertRow].Insert();
+            // 삽입된 행에 붙여넣기 (서식만)
+            dynamic destRow = ws.Rows[insertRow];
+            destRow.PasteSpecial(-4122); // xlPasteFormats = -4122
+            // 값 초기화
+            ws.Cells[insertRow, 2].ClearContents();
+            ws.Cells[insertRow, 3].ClearContents();
+            ws.Cells[insertRow, 4].ClearContents();
+            _app.CutCopyMode = false;
         }
 
         /// <summary>
@@ -422,14 +470,40 @@ namespace GlobeMapper.Services
         {
             dynamic ws = _workbook.Sheets[attachSheetName];
 
+            // 별첨1의 헤더행+데이터행 위치 (서식 복사용)
+            var attach1Start = FindAttachSectionStart(ws, 1);
+            int headerRow = attach1Start >= 0 ? attach1Start + 2 : -1; // 헤더행 (유형/납세자번호/소유지분)
+            int templateDataRow = attach1Start >= 0 ? attach1Start + ATTACH_HEADER_ROWS : -1; // 첫 데이터행
+
             // 마지막 사용 행 찾기
             int lastRow = (int)ws.UsedRange.Row + (int)ws.UsedRange.Rows.Count;
 
-            var startRow = lastRow + 1;
-            ws.Cells[startRow, 2] = $"별첨{attachNum}";
-            ws.Cells[startRow + 2, 2] = "유형";
-            ws.Cells[startRow + 2, 3] = "납세자번호";
-            ws.Cells[startRow + 2, 4] = "소유지분(%)";
+            var startRow = lastRow + 1; // 1행 간격
+            ws.Cells[startRow, 2] = $"첨부{attachNum}";
+
+            // 헤더행: 별첨1의 헤더행 서식 복사
+            if (headerRow > 0)
+            {
+                dynamic srcHeader = ws.Rows[headerRow];
+                srcHeader.Copy();
+                ws.Rows[startRow + 2].PasteSpecial(-4104); // xlPasteAll
+            }
+            else
+            {
+                ws.Cells[startRow + 2, 2] = "유형";
+                ws.Cells[startRow + 2, 3] = "납세자번호";
+                ws.Cells[startRow + 2, 4] = "소유지분(%)";
+            }
+
+            // 데이터행 1개: 별첨1의 첫 데이터행 서식 복사 (값은 비움)
+            if (templateDataRow > 0)
+            {
+                dynamic srcData = ws.Rows[templateDataRow];
+                srcData.Copy();
+                ws.Rows[startRow + 3].PasteSpecial(-4122); // xlPasteFormats
+            }
+
+            _app.CutCopyMode = false;
         }
 
         /// <summary>
@@ -446,7 +520,7 @@ namespace GlobeMapper.Services
             for (int r = start + 1; r <= start + 200; r++)
             {
                 string val = ws.Cells[r, 2].Value?.ToString()?.Trim();
-                if (val != null && val.StartsWith("별첨") && val != $"별첨{attachNum}")
+                if (val != null && val.StartsWith("첨부") && val != $"첨부{attachNum}")
                 {
                     end = r - 1;
                     break;
@@ -480,6 +554,116 @@ namespace GlobeMapper.Services
 
         #endregion
 
+        #region 1.3.3 단순 행 추가/삭제
+
+        /// <summary>
+        /// 시트의 특정 행 아래에 단순 행 추가. templateRow의 서식을 복사.
+        /// </summary>
+        public void AddSimpleRow(string sheetName, int headerRow, int firstDataRow)
+        {
+            dynamic ws = _workbook.Sheets[sheetName];
+            var count = GetSimpleRowCount(sheetName, headerRow, firstDataRow);
+            var insertRow = firstDataRow + count;
+
+            dynamic templateRow = ws.Rows[firstDataRow];
+            templateRow.Copy();
+            ws.Rows[insertRow].Insert();
+            dynamic destRow = ws.Rows[insertRow];
+            destRow.PasteSpecial(-4122); // xlPasteFormats
+            // 값 초기화 (B~R = 2~18)
+            for (int c = 2; c <= 18; c++)
+            {
+                try { ws.Cells[insertRow, c].ClearContents(); } catch { }
+            }
+            _app.CutCopyMode = false;
+        }
+
+        public bool RemoveSimpleRow(string sheetName, int headerRow, int firstDataRow)
+        {
+            var count = GetSimpleRowCount(sheetName, headerRow, firstDataRow);
+            if (count <= 1) return false;
+
+            dynamic ws = _workbook.Sheets[sheetName];
+            var lastRow = firstDataRow + count - 1;
+
+            _app.DisplayAlerts = false;
+            try { ws.Rows[lastRow].Delete(); }
+            finally { _app.DisplayAlerts = true; }
+            return true;
+        }
+
+        public int GetSimpleRowCount(string sheetName, int headerRow, int firstDataRow)
+        {
+            dynamic ws = _workbook.Sheets[sheetName];
+            var count = 0;
+            for (int r = firstDataRow; r <= firstDataRow + 500; r++)
+            {
+                // 테두리 또는 값이 있으면 카운트
+                bool hasValue = false;
+                for (int c = 2; c <= 18; c++)
+                {
+                    string v = ws.Cells[r, c].Value?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(v)) { hasValue = true; break; }
+                }
+
+                bool hasBorder = false;
+                if (!hasValue)
+                {
+                    try
+                    {
+                        dynamic borders = ws.Cells[r, 2].Borders;
+                        hasBorder = borders[9].LineStyle != -4142; // xlNone
+                    }
+                    catch { }
+                }
+
+                if (!hasValue && !hasBorder) break;
+                count++;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// 메타 blockCount 기반 단순 행 추가. firstDataRow의 서식 복사.
+        /// </summary>
+        public void AddSimpleRowByMeta(string sheetName, int firstDataRow)
+        {
+            dynamic ws = _workbook.Sheets[sheetName];
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            var insertRow = firstDataRow + count;
+
+            dynamic templateRow = ws.Rows[firstDataRow];
+            templateRow.Copy();
+            ws.Rows[insertRow].Insert();
+            dynamic destRow = ws.Rows[insertRow];
+            destRow.PasteSpecial(-4122); // xlPasteFormats
+            for (int c = 2; c <= 18; c++)
+            {
+                try { ws.Cells[insertRow, c].ClearContents(); } catch { }
+            }
+            _app.CutCopyMode = false;
+
+            SetMetaInt(sheetName, "blockCount", count + 1);
+        }
+
+        public bool RemoveSimpleRowByMeta(string sheetName, int firstDataRow)
+        {
+            var count = GetMetaInt(sheetName, "blockCount", 1);
+            if (count <= 1) return false;
+
+            dynamic ws = _workbook.Sheets[sheetName];
+            var lastRow = firstDataRow + count - 1;
+
+            _app.DisplayAlerts = false;
+            try { ws.Rows[lastRow].Delete(); }
+            finally { _app.DisplayAlerts = true; }
+
+            SetMetaInt(sheetName, "blockCount", count - 1);
+            return true;
+        }
+
+        #endregion
+
         #region 메타 시트 관리
 
         private void EnsureMetaSheet()
@@ -495,34 +679,43 @@ namespace GlobeMapper.Services
             newSheet.Cells[1, 2] = "value";
 
             var row = 2;
-            // 시트 매핑 초기값
-            string sheet1 = null;
-            for (int i = 1; i <= _workbook.Sheets.Count; i++)
+
+            // 시트 이름 기반 매핑 초기값
+            var sheetMap = new (string section, string sheetName)[]
             {
-                string name = _workbook.Sheets[i].Name;
-                if (name.Contains("(1)")) { sheet1 = name; break; }
+                ("1.1~1.2", "1.1~1.2"),
+                ("1.3.1",   "1.3.1"),
+                ("1.3.2.1", "1.3.2.1"),
+                ("1.3.2.2", "1.3.2.2"),
+                ("1.3.3",   "1.3.3"),
+                ("1.4",     "1.4"),
+            };
+
+            foreach (var (section, name) in sheetMap)
+            {
+                // 시트가 실제로 존재하는지 확인
+                bool exists = false;
+                try { var _ = _workbook.Sheets[name]; exists = true; } catch { }
+                if (exists)
+                {
+                    newSheet.Cells[row, 1] = $"sheet:{section}";
+                    newSheet.Cells[row, 2] = name;
+                    row++;
+                }
             }
 
-            if (sheet1 != null)
+            // 행 블록 카운트 초기값 (1.3.1, 1.3.2.1, 1.3.2.2)
+            var blockSheets = new[] { "1.3.1", "1.3.2.1", "1.3.2.2", "1.3.3", "1.4" };
+            foreach (var name in blockSheets)
             {
-                newSheet.Cells[row, 1] = "sheet:1.1~1.2"; newSheet.Cells[row, 2] = sheet1; row++;
-                newSheet.Cells[row, 1] = "sheet:1.3.1";   newSheet.Cells[row, 2] = sheet1; row++;
-            }
-
-            for (int i = 1; i <= _workbook.Sheets.Count; i++)
-            {
-                string name = _workbook.Sheets[i].Name;
-                if (name == MetaSheetName || name == sheet1) continue;
-                if (name.Contains("(2)"))
-                { newSheet.Cells[row, 1] = "sheet:1.3.2.1"; newSheet.Cells[row, 2] = name; row++; }
-                else if (name.Contains("(3)"))
-                { newSheet.Cells[row, 1] = "sheet:1.3.2.2"; newSheet.Cells[row, 2] = name; row++; }
-            }
-
-            // 블록 카운트 초기값
-            if (sheet1 != null)
-            {
-                newSheet.Cells[row, 1] = $"blockCount:{sheet1}"; newSheet.Cells[row, 2] = 1; row++;
+                bool exists = false;
+                try { var _ = _workbook.Sheets[name]; exists = true; } catch { }
+                if (exists)
+                {
+                    newSheet.Cells[row, 1] = $"blockCount:{name}";
+                    newSheet.Cells[row, 2] = 1;
+                    row++;
+                }
             }
         }
 
