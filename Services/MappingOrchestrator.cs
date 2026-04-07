@@ -59,38 +59,74 @@ namespace GlobeMapper.Services
         }
 
         /// <summary>
-        /// 디렉토리 기반 매핑 (하위 호환용).
+        /// 프로젝트 폴더 기반 매핑.
+        /// 구조: root/main.xlsx + root/{n}/Group.xlsx + root/{n}/CE_*.xlsx
         /// </summary>
         public List<string> MapFolder(string rootPath, Globe.GlobeOecd globe)
         {
             var errors = new List<string>();
-            var filingMapper = new Mapping_1_1_1_2();
 
-            // 루트: 기본정보
-            var rootFiles = GetXlsxFiles(rootPath);
-            foreach (var f in rootFiles)
-                ProcessFile(f, filingMapper, globe, errors);
-
-            // 하위 디렉토리
-            var subDirs = new[] { ("1.3.1", (Func<MappingBase>)(() => new Mapping_1_3_1())),
-                                  ("1.3.2.1", () => new Mapping_1_3_2_1()),
-                                  ("1.3.2.2", () => new Mapping_1_3_2_2()) };
-
-            foreach (var (dirName, createMapper) in subDirs)
+            // ── main.xlsx: _META 기반 매핑 (1.x, 2, 3.4.3 섹션) ──────────
+            var mainPath = Path.Combine(rootPath, "main.xlsx");
+            if (!File.Exists(mainPath))
             {
-                var subDir = Path.Combine(rootPath, dirName);
-                if (!Directory.Exists(subDir)) { errors.Add($"필수 디렉토리 '{dirName}' 없음"); continue; }
-                var files = GetXlsxFiles(subDir);
-                if (files.Count == 0) { errors.Add($"'{dirName}' 디렉토리에 xlsx 없음"); continue; }
-                foreach (var f in files)
-                {
-                    var mapper = createMapper();
-                    ProcessFile(f, mapper, globe, errors);
-                }
+                errors.Add($"main.xlsx를 찾을 수 없습니다. ({rootPath})");
+                return errors;
+            }
+            var mainErrors = MapWorkbook(mainPath, globe);
+            errors.AddRange(mainErrors);
+
+            // ── 숫자 폴더: Group.xlsx + CE_*.xlsx ──────────────────────────
+            var countryDirs = Directory.GetDirectories(rootPath)
+                .Where(d => int.TryParse(Path.GetFileName(d), out _))
+                .OrderBy(d => int.Parse(Path.GetFileName(d)))
+                .ToList();
+
+            foreach (var dir in countryDirs)
+            {
+                var dirName = Path.GetFileName(dir);
+
+                // Group.xlsx
+                var groupPath = Path.Combine(dir, "Group.xlsx");
+                if (File.Exists(groupPath))
+                    MapFileBySheets(groupPath, globe, errors);
+                else
+                    errors.Add($"[{dirName}] Group.xlsx 없음");
+
+                // CE_N.xlsx
+                var ceFiles = Directory.GetFiles(dir, "CE_*.xlsx")
+                    .Where(f => !Path.GetFileName(f).StartsWith("~$"))
+                    .OrderBy(f => f)
+                    .ToList();
+                foreach (var ceFile in ceFiles)
+                    MapFileBySheets(ceFile, globe, errors);
             }
 
             FillMessageSpec(globe);
             return errors;
+        }
+
+        /// <summary>
+        /// 파일 내 시트 이름을 MapperFactory에 직접 조회하여 매핑.
+        /// _META 없이 동작 (Group.xlsx, CE_N.xlsx용).
+        /// </summary>
+        private void MapFileBySheets(string filePath, Globe.GlobeOecd globe, List<string> errors)
+        {
+            var fileName = Path.GetFileName(filePath);
+            try
+            {
+                using var workbook = new XLWorkbook(filePath);
+                foreach (var ws in workbook.Worksheets)
+                {
+                    if (!MapperFactory.TryGetValue(ws.Name, out var createMapper))
+                        continue; // 아직 매퍼 없는 시트는 스킵
+                    createMapper().Map(ws, globe, errors, fileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"[{fileName}] 파일 읽기 오류: {ex.Message}");
+            }
         }
 
         #region 내부 유틸
