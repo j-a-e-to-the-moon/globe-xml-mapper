@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Windows.Forms;
 using GlobeMapper.Services;
 
@@ -10,10 +8,8 @@ namespace GlobeMapper
 {
     public class MainForm : Form
     {
-        private TextBox txtFolderPath;
-        private Button btnBrowse;
-        private Button btnGenerate;
-        private Button btnDownloadTemplates;
+        private ExcelController _excel;
+        private ControlPanelForm _controlPanel;
 
         public MainForm()
         {
@@ -27,232 +23,169 @@ namespace GlobeMapper
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(300, 180);
 
             var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(10),
-                ColumnCount = 3,
+                Padding = new Padding(20),
                 RowCount = 3,
+                ColumnCount = 1,
                 AutoSize = true
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            // Row 0: 폴더 선택
-            var lblFile = new Label
+            var btnOpen = new Button
             {
-                Text = "서식 폴더:",
-                AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                Margin = new Padding(0, 0, 6, 0)
-            };
-
-            txtFolderPath = new TextBox
-            {
-                ReadOnly = true,
-                Width = 350,
-                Anchor = AnchorStyles.Left | AnchorStyles.Right
-            };
-
-            btnBrowse = new Button
-            {
-                Text = "찾아보기",
-                AutoSize = true,
-                Margin = new Padding(6, 0, 0, 0)
-            };
-            btnBrowse.Click += BtnBrowse_Click;
-
-            layout.Controls.Add(lblFile, 0, 0);
-            layout.Controls.Add(txtFolderPath, 1, 0);
-            layout.Controls.Add(btnBrowse, 2, 0);
-
-            // Row 1: XML 생성 버튼
-            btnGenerate = new Button
-            {
-                Text = "XML 생성하기",
-                Enabled = false,
+                Text = "파일 열기",
                 Dock = DockStyle.Fill,
-                Height = 35,
-                Margin = new Padding(0, 8, 0, 0)
+                Height = 38,
+                Margin = new Padding(0, 0, 0, 6)
             };
-            btnGenerate.Click += BtnGenerate_Click;
+            btnOpen.Click += BtnOpen_Click;
 
-            layout.Controls.Add(btnGenerate, 0, 1);
-            layout.SetColumnSpan(btnGenerate, 3);
+            var btnNew = new Button
+            {
+                Text = "새 파일 만들기",
+                Dock = DockStyle.Fill,
+                Height = 38,
+                Margin = new Padding(0, 0, 0, 6)
+            };
+            btnNew.Click += BtnNew_Click;
 
-            // Row 2: 템플릿 다운로드 버튼
-            btnDownloadTemplates = new Button
+            var btnTemplate = new Button
             {
                 Text = "템플릿 다운로드",
                 Dock = DockStyle.Fill,
-                Height = 30,
-                Margin = new Padding(0, 4, 0, 0)
+                Height = 38
             };
-            btnDownloadTemplates.Click += BtnDownloadTemplates_Click;
+            btnTemplate.Click += BtnTemplate_Click;
 
-            layout.Controls.Add(btnDownloadTemplates, 0, 2);
-            layout.SetColumnSpan(btnDownloadTemplates, 3);
+            layout.Controls.Add(btnOpen, 0, 0);
+            layout.Controls.Add(btnNew, 0, 1);
+            layout.Controls.Add(btnTemplate, 0, 2);
 
             Controls.Add(layout);
-            AutoSize = true;
-            AutoSizeMode = AutoSizeMode.GrowAndShrink;
         }
 
-        private void BtnBrowse_Click(object sender, EventArgs e)
+        private void BtnOpen_Click(object sender, EventArgs e)
         {
-            using var dlg = new FolderBrowserDialog
+            using var dlg = new OpenFileDialog
             {
-                Description = "서식 xlsx 파일이 있는 폴더를 선택하세요.",
-                UseDescriptionForTitle = true
+                Filter = "Excel 파일 (*.xlsx)|*.xlsx",
+                Title = "서식 파일 열기"
             };
-
             if (dlg.ShowDialog() != DialogResult.OK) return;
 
-            var xlsxFiles = Directory.GetFiles(dlg.SelectedPath, "*.xlsx", SearchOption.TopDirectoryOnly)
-                .Where(f => !Path.GetFileName(f).StartsWith("~$"))
-                .ToArray();
+            OpenExcelAndShowPanel(dlg.FileName);
+        }
 
-            if (xlsxFiles.Length == 0)
+        private void BtnNew_Click(object sender, EventArgs e)
+        {
+            // 템플릿 파일 위치
+            var templatePath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "Resources", "template.xlsx");
+
+            if (!File.Exists(templatePath))
             {
-                MessageBox.Show("선택한 폴더에 xlsx 파일이 없습니다.", "알림",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // templates 폴더에서 원본 찾기
+                templatePath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "Resources", "templates", "template.xlsx");
+            }
+
+            if (!File.Exists(templatePath))
+            {
+                MessageBox.Show("템플릿 파일을 찾을 수 없습니다.", "오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
-            txtFolderPath.Text = dlg.SelectedPath;
-            btnGenerate.Enabled = true;
+            using var dlg = new SaveFileDialog
+            {
+                Filter = "Excel 파일 (*.xlsx)|*.xlsx",
+                Title = "새 서식 파일 저장",
+                FileName = "GIR_신고서.xlsx"
+            };
+            if (dlg.ShowDialog() != DialogResult.OK) return;
+
+            try
+            {
+                _excel = new ExcelController();
+                _excel.CreateNew(templatePath, dlg.FileName);
+                ShowControlPanel();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"파일 생성 오류:\n{ex.Message}", "오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
-        private void BtnGenerate_Click(object sender, EventArgs e)
+        private void BtnTemplate_Click(object sender, EventArgs e)
         {
-            using var terms = new TermsDialog();
-            if (terms.ShowDialog(this) != DialogResult.OK) return;
+            var templatePath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "Resources", "template.xlsx");
+
+            if (!File.Exists(templatePath))
+            {
+                MessageBox.Show("템플릿 파일을 찾을 수 없습니다.", "오류",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
 
             using var dlg = new SaveFileDialog
             {
-                Filter = "XML 파일 (*.xml)|*.xml",
-                Title = "XML 파일 저장",
-                FileName = "GLOBE_OECD.xml"
+                Filter = "Excel 파일 (*.xlsx)|*.xlsx",
+                Title = "템플릿 저장 위치 선택",
+                FileName = "GIR_template.xlsx"
             };
-
             if (dlg.ShowDialog() != DialogResult.OK) return;
 
+            File.Copy(templatePath, dlg.FileName, true);
+            MessageBox.Show($"템플릿이 저장되었습니다.\n\n{dlg.FileName}",
+                "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void OpenExcelAndShowPanel(string path)
+        {
             try
             {
-                var globe = new Globe.GlobeOecd
-                {
-                    Version = "2.0",
-                    MessageSpec = new Globe.MessageSpecType(),
-                    GlobeBody = new Globe.GlobeBodyType()
-                };
-
-                var orchestrator = new MappingOrchestrator();
-                var mappingErrors = orchestrator.MapFolder(txtFolderPath.Text, globe);
-
-                var xml = XmlExportService.Serialize(globe);
-                File.WriteAllText(dlg.FileName, xml, System.Text.Encoding.UTF8);
-
-                var validationErrors = ValidationUtil.Validate(globe);
-
-                var allErrors = new List<string>();
-                if (mappingErrors.Count > 0)
-                {
-                    allErrors.Add("── 매핑 오류 ──");
-                    allErrors.AddRange(mappingErrors);
-                    allErrors.Add("");
-                }
-                if (validationErrors.Count > 0)
-                {
-                    allErrors.Add("── 검증 오류 (에러코드 기준) ──");
-                    allErrors.AddRange(validationErrors);
-                }
-
-                var errorsPath = Path.ChangeExtension(dlg.FileName, ".errors.txt");
-                if (allErrors.Count > 0)
-                {
-                    File.WriteAllText(errorsPath,
-                        $"[오류 목록] {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
-                        $"매핑 오류 {mappingErrors.Count}건 / 검증 오류 {validationErrors.Count}건{Environment.NewLine}{Environment.NewLine}" +
-                        string.Join(Environment.NewLine, allErrors),
-                        System.Text.Encoding.UTF8);
-
-                    MessageBox.Show(
-                        $"XML 생성 완료.\n\n매핑 오류: {mappingErrors.Count}건\n검증 오류: {validationErrors.Count}건\n\n오류 목록: {errorsPath}",
-                        "완료 (오류 있음)", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-                else
-                {
-                    if (File.Exists(errorsPath)) File.Delete(errorsPath);
-                    MessageBox.Show("XML 생성이 완료되었습니다.", "완료",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+                _excel = new ExcelController();
+                _excel.Open(path);
+                ShowControlPanel();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"XML 생성 중 오류 발생:\n{ex.Message}", "오류",
+                MessageBox.Show($"파일 열기 오류:\n{ex.Message}", "오류",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void BtnDownloadTemplates_Click(object sender, EventArgs e)
+        private void ShowControlPanel()
         {
-            using var dlg = new FolderBrowserDialog
+            Hide();
+
+            _controlPanel = new ControlPanelForm(_excel);
+            _controlPanel.FormClosed += (s, e) =>
             {
-                Description = "템플릿을 저장할 폴더를 선택하세요.",
-                UseDescriptionForTitle = true
+                // Control Panel 닫힘 → 메인화면 복귀
+                _excel?.Dispose();
+                _excel = null;
+                _controlPanel = null;
+                Show();
             };
+            _controlPanel.Show();
+        }
 
-            if (dlg.ShowDialog() != DialogResult.OK) return;
-
-            try
-            {
-                var targetDir = Path.Combine(dlg.SelectedPath, "GlobeMapper_Templates");
-                Directory.CreateDirectory(targetDir);
-
-                var templatesDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "templates");
-                if (!Directory.Exists(templatesDir))
-                {
-                    MessageBox.Show("템플릿 파일을 찾을 수 없습니다.", "오류",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-
-                // 디렉토리 구조로 복사
-                var subDirs = new[] { "1.3.1", "1.3.2.1", "1.3.2.2" };
-                var count = 0;
-
-                // 루트용 템플릿 (1.1~1.2)
-                foreach (var file in Directory.GetFiles(templatesDir, "template_1.1*"))
-                {
-                    File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), true);
-                    count++;
-                }
-
-                // 하위 디렉토리별 템플릿
-                foreach (var sub in subDirs)
-                {
-                    var subTarget = Path.Combine(targetDir, sub);
-                    Directory.CreateDirectory(subTarget);
-                    foreach (var file in Directory.GetFiles(templatesDir, $"template_{sub}*"))
-                    {
-                        File.Copy(file, Path.Combine(subTarget, Path.GetFileName(file)), true);
-                        count++;
-                    }
-                }
-
-                MessageBox.Show($"템플릿 {count}개가 다운로드되었습니다.\n\n위치: {targetDir}\n\n구조:\n  루트/ - 기본정보(1.1~1.2)\n  1.3.1/ - UPE\n  1.3.2.1/ - 구성기업\n  1.3.2.2/ - 제외기업",
-                    "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"템플릿 다운로드 오류:\n{ex.Message}", "오류",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            // 메인 윈폼 종료 시 엑셀도 함께 종료
+            _excel?.Dispose();
+            _controlPanel?.Close();
+            base.OnFormClosing(e);
         }
     }
 }
