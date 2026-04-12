@@ -137,11 +137,12 @@ namespace GlobeMapper.Services
             // ── 3.2.4.6 그 밖의 회계기준 ─────────────────────────────────────
             Map3246(ws, ceComp, errors, fileName);
 
-            // ── 3.4.1 소득산입규칙(IIR) 적용 ────────────────────────────────
-            Map341(ws, js, errors, fileName);
-
-            // ── 3.4.2 소득산입보완규칙(UTPR) 추가세액 ───────────────────────
-            Map342(ws, js, errors, fileName);
+            // ── 3.4.1/3.4.2 "추가세액" 별도 시트 ────────────────────────────
+            if (ws.Workbook.TryGetWorksheet("추가세액", out var topUpWs))
+            {
+                Map341(topUpWs, js, errors, fileName);
+                Map342(topUpWs, js, errors, fileName);
+            }
         }
 
         // ─── 3.2.4(a): row에서 K열 여/부 → Elections.SimplCalculations ──
@@ -1286,11 +1287,11 @@ namespace GlobeMapper.Services
             var rSec = FindRow(ws, "3.4.2");
             if (rSec < 0) return;
 
-            // 3.4.2.2: 제73조3항2호 → Article251TopUpTax
-            var r2 = FindRow(ws, "3항2호", rSec);
+            // 3.4.2.2: "제73조제3항제2호에 따라" → Article251TopUpTax
+            var r2 = FindRow(ws, "3항제2호", rSec);
+            if (r2 < 0) r2 = FindRow(ws, "납부액을 차감", rSec); // 폴백
             // 3.4.2.3: 소득산입보완규칙 추가세액 합계 → TotalUtprTopUpTax
             var r3 = FindRow(ws, "소득산입보완규칙 추가세액 합계", rSec);
-            if (r3 < 0) r3 = FindRow(ws, "소득산입보완규칙", rSec + (r2 > 0 ? r2 - rSec + 1 : 1));
 
             var art251   = r2 > 0 ? ws.Cell(r2, 15).GetString()?.Trim() : null;
             var totalUtpr = r3 > 0 ? ws.Cell(r3, 15).GetString()?.Trim() : null;
