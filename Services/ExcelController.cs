@@ -14,6 +14,7 @@ namespace GlobeMapper.Services
         private dynamic _app;
         private dynamic _workbook;
         private bool _disposed;
+        private bool _ownsApp;   // Open()으로 직접 생성한 경우만 true → Quit() 호출 여부 결정
 
         public const string MetaSheetName = "_META";
 
@@ -55,14 +56,16 @@ namespace GlobeMapper.Services
 
             _app = Activator.CreateInstance(excelType);
             _app.Visible = true;
+            _ownsApp = true;
 
             dynamic workbooks = _app.Workbooks;
             _workbook = workbooks.Open(path);
             Marshal.ReleaseComObject(workbooks);
 
-            var firstSheet = _workbook.Sheets[1];
+            dynamic firstSheet = _workbook.Sheets[1];
             EnsureMetaSheet();
-            ((dynamic)firstSheet).Activate();
+            firstSheet.Activate();
+            Marshal.ReleaseComObject(firstSheet);
         }
 
         // oleaut32.dll의 GetActiveObject 직접 호출 (Marshal.GetActiveObject는 .NET Core에서 제거됨)
@@ -99,6 +102,7 @@ namespace GlobeMapper.Services
                 throw new InvalidOperationException(
                     "열려 있는 Excel 통합문서가 없습니다.\nExcel에서 파일을 열고 다시 시도하세요.");
 
+            _ownsApp = false;  // 외부 인스턴스에 연결 → Quit() 하지 않음
             EnsureMetaSheet();
         }
 
@@ -119,6 +123,7 @@ namespace GlobeMapper.Services
         public void CloseWithSavePrompt()
         {
             if (_workbook == null) return;
+            bool doQuit = false;
             try
             {
                 bool saved = (bool)_workbook.Saved;
@@ -130,16 +135,17 @@ namespace GlobeMapper.Services
                         System.Windows.Forms.MessageBoxButtons.YesNoCancel,
                         System.Windows.Forms.MessageBoxIcon.Question);
 
-                    if (result == System.Windows.Forms.DialogResult.Cancel) return;
+                    if (result == System.Windows.Forms.DialogResult.Cancel) return; // Quit 하지 않음
                     _workbook.Close(SaveChanges: result == System.Windows.Forms.DialogResult.Yes);
                 }
                 else
                 {
                     _workbook.Close(SaveChanges: false);
                 }
+                doQuit = true;
             }
-            catch { }
-            finally { QuitApp(); }
+            catch { doQuit = true; }
+            finally { if (doQuit) QuitApp(); }
         }
 
         /// <summary>
@@ -1341,7 +1347,7 @@ namespace GlobeMapper.Services
 
         private void QuitApp()
         {
-            // 순서 중요: 워크북 → Quit → 앱 → GC
+            // 순서 중요: 워크북 → (소유 시) Quit → 앱 → GC
             // GC.Collect 없이는 dynamic으로 생성된 중간 COM 객체(RCW)가 남아 Excel 프로세스가 살아있게 됨
             try
             {
@@ -1350,7 +1356,9 @@ namespace GlobeMapper.Services
                     Marshal.ReleaseComObject(_workbook);
                     _workbook = null;
                 }
-                _app?.Quit();
+                // AttachToActive()로 연결한 경우 Quit() 호출 금지 — 사용자 Excel을 닫지 않음
+                if (_ownsApp)
+                    _app?.Quit();
             }
             catch { }
             finally
@@ -1360,6 +1368,7 @@ namespace GlobeMapper.Services
                     Marshal.ReleaseComObject(_app);
                     _app = null;
                 }
+                _ownsApp = false;
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();

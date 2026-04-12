@@ -11,6 +11,13 @@ namespace GlobeMapper
         private Button btnNext;
         private Button btnCancel;
 
+        private static readonly Color BG     = Color.FromArgb(30, 30, 32);
+        private static readonly Color BG2    = Color.FromArgb(22, 22, 24);
+        private static readonly Color BG3    = Color.FromArgb(44, 44, 50);
+        private static readonly Color FG     = Color.FromArgb(215, 215, 220);
+        private static readonly Color BORDER = Color.FromArgb(55, 55, 62);
+        private static readonly Color ACCENT = Color.FromArgb(210, 160, 0);
+
         public TermsDialog()
         {
             InitializeComponent();
@@ -18,66 +25,95 @@ namespace GlobeMapper
 
         private void InitializeComponent()
         {
-            Text = "약관 동의";
-            AutoScaleMode = AutoScaleMode.Dpi;
+            Text            = "이용 약관 동의";
+            AutoScaleMode   = AutoScaleMode.Dpi;
             FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            StartPosition = FormStartPosition.CenterParent;
-            ClientSize = new Size(500, 350);
+            MaximizeBox     = false;
+            MinimizeBox     = false;
+            StartPosition   = FormStartPosition.CenterParent;
+            ClientSize      = new Size(560, 530);
+            BackColor       = BG;
+            ForeColor       = FG;
+            Font            = new Font("Segoe UI", 11f);
 
-            // 약관 내용
-            var txtTerms = new TextBox
+            // ── 약관 텍스트 ──────────────────────────────────────────────
+            var rtb = new RichTextBox
             {
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Location = new Point(12, 12),
-                Size = new Size(476, 240),
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                BackColor = SystemColors.Window
+                ReadOnly    = true,
+                BorderStyle = BorderStyle.None,
+                ScrollBars  = RichTextBoxScrollBars.Vertical,
+                BackColor   = BG3,
+                ForeColor   = FG,
+                Font        = new Font("Segoe UI", 11f),
+                WordWrap    = true,
+                Location    = new Point(16, 16),
+                Size        = new Size(528, 400),
+                Anchor      = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
             };
 
             var termsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "terms.txt");
-            if (File.Exists(termsPath))
-                txtTerms.Text = File.ReadAllText(termsPath);
-            else
-                txtTerms.Text = "(약관 파일을 찾을 수 없습니다)";
+            rtb.Text = File.Exists(termsPath)
+                ? File.ReadAllText(termsPath)
+                : "(약관 파일을 찾을 수 없습니다)";
 
-            // 동의 체크박스
+            // ── 구분선 ────────────────────────────────────────────────────
+            var divider = new Panel
+            {
+                BackColor = BORDER,
+                Location  = new Point(16, 424),
+                Size      = new Size(528, 1),
+                Anchor    = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+            };
+
+            // ── 동의 체크박스 ─────────────────────────────────────────────
             chkAgree = new CheckBox
             {
-                Text = "위 약관에 동의합니다.",
-                AutoSize = true,
-                Location = new Point(12, 262),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+                Text      = "위 약관에 동의합니다.",
+                AutoSize  = true,
+                Location  = new Point(16, 438),
+                ForeColor = FG,
+                Font      = new Font("Segoe UI", 11f),
+                Anchor    = AnchorStyles.Bottom | AnchorStyles.Left,
             };
-            chkAgree.CheckedChanged += (s, e) => btnNext.Enabled = chkAgree.Checked;
+            chkAgree.CheckedChanged += (s, e) => btnNext.Visible = chkAgree.Checked;
 
-            // 버튼
-            btnCancel = new Button
-            {
-                Text = "취소",
-                Size = new Size(80, 30),
-                Location = new Point(408, 308),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-                DialogResult = DialogResult.Cancel
-            };
+            // ── 버튼 ──────────────────────────────────────────────────────
+            btnCancel = MakeBtn("취소", DialogResult.Cancel, Color.FromArgb(60, 60, 66));
+            btnCancel.Location = new Point(448, 482);
+            btnCancel.Anchor   = AnchorStyles.Bottom | AnchorStyles.Right;
 
-            btnNext = new Button
-            {
-                Text = "다음으로",
-                Size = new Size(80, 30),
-                Location = new Point(320, 308),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-                Enabled = false,
-                DialogResult = DialogResult.OK
-            };
+            btnNext = MakeBtn("다음", DialogResult.OK, Color.FromArgb(55, 100, 170));
+            btnNext.ForeColor = Color.White;
+            btnNext.Location  = new Point(340, 482);
+            btnNext.Visible   = false;
+            btnNext.Anchor    = AnchorStyles.Bottom | AnchorStyles.Right;
 
             AcceptButton = btnNext;
             CancelButton = btnCancel;
 
-            Controls.AddRange(new Control[] { txtTerms, chkAgree, btnNext, btnCancel });
+            Controls.AddRange(new Control[] { rtb, divider, chkAgree, btnNext, btnCancel });
+        }
+
+        private static Button MakeBtn(string text, DialogResult dr, Color bg)
+        {
+            var hover = Color.FromArgb(
+                Math.Min(bg.R + 20, 255),
+                Math.Min(bg.G + 20, 255),
+                Math.Min(bg.B + 20, 255));
+            var btn = new Button
+            {
+                Text         = text,
+                DialogResult = dr,
+                Size         = new Size(96, 36),
+                FlatStyle    = FlatStyle.Flat,
+                BackColor    = bg,
+                ForeColor    = Color.White,
+                Font         = new Font("Segoe UI", 10.5f),
+                Cursor       = Cursors.Hand,
+            };
+            btn.FlatAppearance.BorderSize            = 0;
+            btn.FlatAppearance.MouseOverBackColor    = hover;
+            return btn;
         }
     }
 }
