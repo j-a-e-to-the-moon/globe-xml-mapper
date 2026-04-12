@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.3.2.1 구성기업 (CE)</title>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --surface: #252526;
+    --surface2: #2d2d2d;
+    --border: #3e3e42;
+    --accent: #0078d4;
+    --accent-hover: #106ebe;
+    --danger: #c72f2f;
+    --danger-hover: #a52020;
+    --text: #cccccc;
+    --text-dim: #888;
+    --label: #9cdcfe;
+    --section-title: #4ec9b0;
+    --input-bg: #3c3c3c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    padding: 24px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 span { color: var(--text-dim); font-weight: 400; font-size: 13px; margin-left: 10px; }
+
+  /* ── CE 카드 ─────────────────────────────────────── */
+  .ce-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .ce-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .ce-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    cursor: pointer;
+    user-select: none;
+  }
+  .ce-header:hover { background: #333; }
+
+  .ce-number {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    min-width: 28px;
+    text-align: center;
+  }
+
+  .ce-name-preview {
+    flex: 1;
+    color: #fff;
+    font-weight: 500;
+    font-size: 13px;
+  }
+
+  .ce-toggle {
+    color: var(--text-dim);
+    font-size: 11px;
+    transition: transform 0.15s;
+  }
+  .ce-card.collapsed .ce-toggle { transform: rotate(-90deg); }
+
+  .ce-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .ce-card.collapsed .ce-body { display: none; }
+
+  /* ── 섹션 ────────────────────────────────────────── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--section-title);
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── 필드 그리드 ─────────────────────────────────── */
+  .field-grid {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    row-gap: 8px;
+    align-items: center;
+  }
+
+  .field-label {
+    color: var(--label);
+    font-size: 12px;
+    padding-right: 12px;
+    line-height: 1.4;
+  }
+
+  .field-input {
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-size: 12px;
+    padding: 4px 8px;
+    height: 26px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.1s;
+  }
+  .field-input:focus { border-color: var(--accent); }
+
+  select.field-input { cursor: pointer; }
+  select.field-input option { background: #2d2d2d; }
+
+  /* multi-select */
+  select[multiple].field-input {
+    height: auto;
+    min-height: 60px;
+    padding: 4px;
+  }
+  select[multiple].field-input option { padding: 2px 4px; }
+
+  .field-hint {
+    grid-column: 2;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: -4px;
+  }
+
+  /* ── 소유지분 테이블 ──────────────────────────────── */
+  .ownership-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .ownership-table th {
+    background: #2a2a2a;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .ownership-table td {
+    padding: 4px 4px;
+    border-bottom: 1px solid #2a2a2a;
+    vertical-align: middle;
+  }
+  .ownership-table tr:last-child td { border-bottom: none; }
+
+  .ownership-table .field-input {
+    width: 100%;
+    height: 24px;
+    font-size: 12px;
+  }
+
+  .td-del { width: 32px; text-align: center; }
+
+  /* ── 버튼 ─────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border: none;
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    height: 28px;
+    font-family: inherit;
+    transition: background 0.1s;
+  }
+
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: #333; }
+
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: var(--danger-hover); }
+
+  .btn-icon {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 2px 7px;
+    font-size: 14px;
+    height: 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 0.1s, color 0.1s;
+  }
+  .btn-icon:hover { background: #444; color: #fff; }
+  .btn-icon.del:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+  .row-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  /* ── 전체 액션 바 ─────────────────────────────────── */
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .bottom-bar {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  /* ── JSON 출력 ─────────────────────────────────────── */
+  #json-output {
+    display: none;
+    margin-top: 16px;
+    background: #1a1a1a;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    color: #9cdcfe;
+    white-space: pre;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .badge {
+    display: inline-block;
+    background: #333;
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+</style>
+</head>
+<body>
+
+<h1>1.3.2.1 구성기업 (CE) <span>Constituent Entity Information</span></h1>
+
+<div class="toolbar">
+  <button class="btn btn-primary" onclick="addCe()">＋ 구성기업 추가</button>
+  <button class="btn btn-secondary" onclick="removeLastCe()">－ 마지막 항목 삭제</button>
+  <span class="badge" id="count-badge">0개</span>
+</div>
+
+<div class="ce-list" id="ce-list"></div>
+
+<div class="bottom-bar">
+  <button class="btn btn-primary" onclick="exportJson()">JSON 미리보기</button>
+  <button class="btn btn-primary" style="background:#107c10;" onclick="downloadJson()">JSON 파일 저장</button>
+  <button class="btn btn-secondary" onclick="document.getElementById('json-output').style.display='none'">닫기</button>
+</div>
+<pre id="json-output"></pre>
+
+<script>
+// ── 데이터 ──────────────────────────────────────────────────────────────────
+
+const COUNTRY_CODES = "AF,AX,AL,DZ,AS,AD,AO,AI,AQ,AG,AR,AM,AW,AU,AT,AZ,BS,BH,BD,BB,BY,BE,BZ,BJ,BM,BT,BO,BQ,BA,BW,BV,BR,IO,BN,BG,BF,BI,KH,CM,CA,CV,KY,CF,TD,CL,CN,CX,CC,CO,KM,CG,CD,CK,CR,CI,HR,CU,CW,CY,CZ,DK,DJ,DM,DO,EC,EG,SV,GQ,ER,EE,ET,FK,FO,FJ,FI,FR,GF,PF,TF,GA,GM,GE,DE,GH,GI,GR,GL,GD,GP,GU,GT,GG,GN,GW,GY,HT,HM,VA,HN,HK,HU,IS,IN,ID,IR,IQ,IE,IM,IL,IT,JM,JP,JE,JO,KZ,KE,KI,KP,KR,KW,KG,LA,LV,LB,LS,LR,LY,LI,LT,LU,MO,MK,MG,MW,MY,MV,ML,MT,MH,MQ,MR,MU,YT,MX,FM,MD,MC,MN,ME,MS,MA,MZ,MM,NA,NR,NP,NL,NC,NZ,NI,NE,NG,NU,NF,MP,NO,OM,PK,PW,PS,PA,PG,PY,PE,PH,PN,PL,PT,PR,QA,RE,RO,RU,RW,BL,SH,KN,LC,MF,PM,VC,WS,SM,ST,SA,SN,RS,SC,SL,SG,SX,SK,SI,SB,SO,ZA,GS,SS,ES,LK,SD,SR,SJ,SZ,SE,CH,SY,TW,TJ,TZ,TH,TL,TG,TK,TO,TT,TN,TR,TM,TC,TV,UG,UA,AE,GB,US,UM,UY,UZ,VU,VE,VN,VG,VI,WF,EH,YE,ZM,ZW,XK".split(',');
+
+const RULES = [
+  { code: "GIR201", label: "GIR201 - QIIR (other jurisdictions only)" },
+  { code: "GIR202", label: "GIR202 - QIIR (other + parent jurisdiction)" },
+  { code: "GIR203", label: "GIR203 - QUTPR" },
+  { code: "GIR204", label: "GIR204 - QDMTT" },
+  { code: "GIR205", label: "GIR205 - Not applicable" },
+];
+
+const GLOBE_STATUS = [
+  { code: "GIR301", label: "GIR301 - Constituent Entity" },
+  { code: "GIR302", label: "GIR302 - Flow-Through (Tax Transparent)" },
+  { code: "GIR303", label: "GIR303 - Flow-Through (Reverse Hybrid)" },
+  { code: "GIR304", label: "GIR304 - Hybrid Entity" },
+  { code: "GIR305", label: "GIR305 - Permanent Establishment" },
+  { code: "GIR306", label: "GIR306 - Main Entity" },
+  { code: "GIR307", label: "GIR307 - Minority-Owned Parent Entity" },
+  { code: "GIR308", label: "GIR308 - Minority-Owned Subsidiary" },
+  { code: "GIR309", label: "GIR309 - Minority-Owned Constituent Entity" },
+  { code: "GIR310", label: "GIR310 - Investment Entity" },
+  { code: "GIR311", label: "GIR311 - Insurance Investment Entity" },
+  { code: "GIR312", label: "GIR312 - Securitisation Entity" },
+  { code: "GIR313", label: "GIR313 - JV" },
+  { code: "GIR314", label: "GIR314 - JV Subsidiary" },
+  { code: "GIR315", label: "GIR315 - Non-Material Constituent Entity" },
+  { code: "GIR316", label: "GIR316 - Excluded Entity" },
+  { code: "GIR317", label: "GIR317 - Parent Entity (Art. 10.3.5 QIIR)" },
+  { code: "GIR318", label: "GIR318 - Non-group Member" },
+];
+
+const OWNERSHIP_TYPE = [
+  { code: "GIR801", label: "GIR801 - UPE" },
+  { code: "GIR802", label: "GIR802 - Constituent Entities" },
+  { code: "GIR803", label: "GIR803 - JVs" },
+  { code: "GIR804", label: "GIR804 - JV Subsidiaries" },
+  { code: "GIR805", label: "GIR805 - Excluded Entities (aggregate)" },
+  { code: "GIR806", label: "GIR806 - Non-Group members (aggregate)" },
+];
+
+const POPE_IPE = [
+  { code: "",       label: "(선택 안 함)" },
+  { code: "GIR901", label: "GIR901 - POPE" },
+  { code: "GIR902", label: "GIR902 - Intermediate Parent Entity" },
+  { code: "GIR903", label: "GIR903 - Parent Entity (Art. 10.3.5 QIIR)" },
+];
+
+// ── 상태 ──────────────────────────────────────────────────────────────────
+
+let ceList = [];
+let nextId = 1;
+
+// ── CE 추가/삭제 ───────────────────────────────────────────────────────────
+
+function addCe() {
+  const id = nextId++;
+  ceList.push({ id, expanded: true, ownerships: [] });
+  render();
+  // 스크롤 이동
+  setTimeout(() => {
+    const el = document.querySelector(`[data-ce-id="${id}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 50);
+}
+
+function removeLastCe() {
+  if (ceList.length === 0) return;
+  if (!confirm(`구성기업 ${ceList.length}번을 삭제하시겠습니까?`)) return;
+  ceList.pop();
+  render();
+}
+
+function toggleCe(id) {
+  const ce = ceList.find(c => c.id === id);
+  if (ce) { ce.expanded = !ce.expanded; render(); }
+}
+
+// ── 소유지분 추가/삭제 ─────────────────────────────────────────────────────
+
+function addOwnership(ceId) {
+  const ce = ceList.find(c => c.id === ceId);
+  if (ce) { ce.ownerships.push({ id: nextId++ }); render(); }
+}
+
+function removeOwnership(ceId, owId) {
+  const ce = ceList.find(c => c.id === ceId);
+  if (ce) {
+    ce.ownerships = ce.ownerships.filter(o => o.id !== owId);
+    render();
+  }
+}
+
+// ── 상태 수집 (DOM → 데이터) ───────────────────────────────────────────────
+
+function collectState() {
+  // 현재 DOM 값을 ceList에 반영 (expanded 상태 유지)
+  ceList.forEach(ce => {
+    const card = document.querySelector(`[data-ce-id="${ce.id}"]`);
+    if (!card) return;
+    ce.expanded = !card.classList.contains('collapsed');
+  });
+}
+
+// ── 렌더링 ────────────────────────────────────────────────────────────────
+
+function render() {
+  collectState();
+
+  const container = document.getElementById('ce-list');
+  const prevValues = collectFormValues();
+
+  container.innerHTML = ceList.map((ce, idx) => renderCe(ce, idx)).join('');
+
+  // 이전 입력값 복원
+  restoreFormValues(prevValues);
+
+  // 이벤트 위임 설정
+  document.getElementById('count-badge').textContent = `${ceList.length}개`;
+}
+
+function renderCe(ce, idx) {
+  const num = idx + 1;
+
+  const countryOptions = COUNTRY_CODES.map(c =>
+    `<option value="${c}">${c}</option>`
+  ).join('');
+
+  const rulesOptions = RULES.map(r =>
+    `<option value="${r.code}">${r.label}</option>`
+  ).join('');
+
+  const statusOptions = GLOBE_STATUS.map(r =>
+    `<option value="${r.code}">${r.label}</option>`
+  ).join('');
+
+  const popeOptions = POPE_IPE.map(r =>
+    `<option value="${r.code}">${r.label}</option>`
+  ).join('');
+
+  const ownershipRows = ce.ownerships.map(ow => {
+    const typeOpts = OWNERSHIP_TYPE.map(r =>
+      `<option value="${r.code}">${r.label}</option>`
+    ).join('');
+    return `
+      <tr data-ow-id="${ow.id}">
+        <td><select class="field-input" data-field="ow-type" data-ce="${ce.id}" data-ow="${ow.id}">
+          <option value="">(선택)</option>${typeOpts}
+        </select></td>
+        <td><input class="field-input" type="text" placeholder="납세자번호"
+          data-field="ow-tin" data-ce="${ce.id}" data-ow="${ow.id}"></td>
+        <td><input class="field-input" type="number" min="0" max="100" step="0.01" placeholder="0.00"
+          data-field="ow-pct" data-ce="${ce.id}" data-ow="${ow.id}"></td>
+        <td class="td-del">
+          <button class="btn-icon del" onclick="removeOwnership(${ce.id}, ${ow.id})" title="삭제">×</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  return `
+  <div class="ce-card${ce.expanded ? '' : ' collapsed'}" data-ce-id="${ce.id}">
+    <div class="ce-header" onclick="toggleCe(${ce.id})">
+      <span class="ce-number">${num}</span>
+      <span class="ce-name-preview" id="preview-${ce.id}">구성기업 ${num}</span>
+      <span class="ce-toggle">▼</span>
+    </div>
+    <div class="ce-body">
+
+      <!-- 변동 여부 -->
+      <div>
+        <div class="section-title">변동사항</div>
+        <div class="field-grid">
+          <span class="field-label">1. 직전 사업연도 대비 변동 여부</span>
+          <select class="field-input" data-field="changeFlag" data-ce="${ce.id}">
+            <option value="">(선택)</option>
+            <option value="true">예 (true)</option>
+            <option value="false">아니오 (false)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 소재지국 -->
+      <div>
+        <div class="section-title">소재지국</div>
+        <div class="field-grid">
+          <span class="field-label">2. 소재지국</span>
+          <select class="field-input" data-field="resCountryCode" data-ce="${ce.id}">
+            <option value="">(선택)</option>${countryOptions}
+          </select>
+
+          <span class="field-label">3. 적용가능규칙</span>
+          <select class="field-input" multiple data-field="rules" data-ce="${ce.id}">
+            ${rulesOptions}
+          </select>
+          <span class="field-hint">Ctrl+클릭으로 다중 선택</span>
+        </div>
+      </div>
+
+      <!-- 구성기업 기본 정보 -->
+      <div>
+        <div class="section-title">구성기업정보</div>
+        <div class="field-grid">
+          <span class="field-label">4. 구성기업 상호</span>
+          <input class="field-input" type="text" data-field="name" data-ce="${ce.id}"
+            oninput="updatePreview(${ce.id}, this.value)" placeholder="법인명">
+
+          <span class="field-label">5. 납세자번호</span>
+          <input class="field-input" type="text" data-field="tin" data-ce="${ce.id}" placeholder="TIN">
+
+          <span class="field-label">6. 신고접수국가 납세자번호</span>
+          <input class="field-input" type="text" data-field="receivingTin" data-ce="${ce.id}" placeholder="KR 발급 TIN">
+
+          <span class="field-label">7. 기업유형</span>
+          <select class="field-input" multiple data-field="globeStatus" data-ce="${ce.id}">
+            ${statusOptions}
+          </select>
+          <span class="field-hint">Ctrl+클릭으로 다중 선택</span>
+        </div>
+      </div>
+
+      <!-- 소유지분 (별첨) -->
+      <div>
+        <div class="section-title">소유지분 구조 <span style="color:var(--text-dim);font-weight:400;font-size:11px;text-transform:none;">(별첨 — 주주 목록)</span></div>
+        <table class="ownership-table">
+          <thead>
+            <tr>
+              <th style="width:280px">유형 (OwnershipType)</th>
+              <th style="width:160px">납세자번호 (TIN)</th>
+              <th style="width:100px">소유지분 (%)</th>
+              <th style="width:32px"></th>
+            </tr>
+          </thead>
+          <tbody id="ow-body-${ce.id}">
+            ${ownershipRows}
+          </tbody>
+        </table>
+        <button class="btn btn-secondary" style="font-size:12px;height:26px;" onclick="addOwnership(${ce.id})">＋ 주주 추가</button>
+      </div>
+
+      <!-- QIIR -->
+      <div>
+        <div class="section-title">QIIR (적격소득산입규칙)</div>
+        <div class="field-grid">
+          <span class="field-label">11. 모기업 유형 (PopeIpe)</span>
+          <select class="field-input" data-field="popeIpe" data-ce="${ce.id}">
+            ${popeOptions}
+          </select>
+
+          <span class="field-label">12. QIIR 모기업 납세자번호</span>
+          <input class="field-input" type="text" data-field="qiirTin" data-ce="${ce.id}" placeholder="TIN">
+
+          <span class="field-label">13. 부분소유모기업 납세자번호</span>
+          <input class="field-input" type="text" data-field="mopeTin" data-ce="${ce.id}" placeholder="TIN">
+        </div>
+      </div>
+
+      <!-- QUTPR -->
+      <div>
+        <div class="section-title">QUTPR (적격소득산입보완규칙)</div>
+        <div class="field-grid">
+          <span class="field-label">14. 해외진출 초기 특례 적용 여부 (Art.9.3)</span>
+          <select class="field-input" data-field="art93" data-ce="${ce.id}">
+            <option value="">(선택)</option>
+            <option value="true">예 (true)</option>
+            <option value="false">아니오 (false)</option>
+          </select>
+
+          <span class="field-label">15. 소유지분 합계 (%)</span>
+          <input class="field-input" type="number" min="0" max="100" step="0.01"
+            data-field="aggOwnership" data-ce="${ce.id}" placeholder="예: 75.50">
+
+          <span class="field-label">16. UPE 소유지분이 합계보다 큰지 여부</span>
+          <select class="field-input" data-field="upeOwnership" data-ce="${ce.id}">
+            <option value="">(선택)</option>
+            <option value="true">예 (true)</option>
+            <option value="false">아니오 (false)</option>
+          </select>
+        </div>
+      </div>
+
+    </div>
+  </div>`;
+}
+
+// ── 헤더 미리보기 업데이트 ────────────────────────────────────────────────
+
+function updatePreview(ceId, value) {
+  const el = document.getElementById(`preview-${ceId}`);
+  const idx = ceList.findIndex(c => c.id === ceId);
+  if (el) el.textContent = value.trim() || `구성기업 ${idx + 1}`;
+}
+
+// ── 폼 값 저장/복원 (render 후 입력값 유지) ──────────────────────────────
+
+function collectFormValues() {
+  const values = {};
+  document.querySelectorAll('[data-field]').forEach(el => {
+    const key = `${el.dataset.ce}-${el.dataset.field}-${el.dataset.ow || ''}`;
+    if (el.tagName === 'SELECT' && el.multiple) {
+      values[key] = Array.from(el.selectedOptions).map(o => o.value);
+    } else {
+      values[key] = el.value;
+    }
+  });
+  return values;
+}
+
+function restoreFormValues(values) {
+  document.querySelectorAll('[data-field]').forEach(el => {
+    const key = `${el.dataset.ce}-${el.dataset.field}-${el.dataset.ow || ''}`;
+    if (!(key in values)) return;
+    if (el.tagName === 'SELECT' && el.multiple) {
+      const selected = values[key];
+      Array.from(el.options).forEach(o => { o.selected = selected.includes(o.value); });
+    } else {
+      el.value = values[key];
+    }
+    // 이름 필드면 미리보기도 복원
+    if (el.dataset.field === 'name') {
+      updatePreview(parseInt(el.dataset.ce), el.value);
+    }
+  });
+}
+
+// ── JSON 빌드 ──────────────────────────────────────────────────────────────
+
+function buildJson() {
+  return ceList.map((ce, idx) => {
+    const get = (field) => {
+      const el = document.querySelector(`[data-field="${field}"][data-ce="${ce.id}"]`);
+      if (!el) return null;
+      if (el.tagName === 'SELECT' && el.multiple) {
+        const vals = Array.from(el.selectedOptions).map(o => o.value).filter(Boolean);
+        return vals.length ? vals : null;
+      }
+      return el.value.trim() || null;
+    };
+
+    const ownerships = ce.ownerships.map(ow => {
+      const getOw = (field) => {
+        const el = document.querySelector(`[data-field="${field}"][data-ce="${ce.id}"][data-ow="${ow.id}"]`);
+        return el ? (el.value.trim() || null) : null;
+      };
+      const obj = {};
+      const t = getOw('ow-type'); if (t) obj.ownershipType = t;
+      const tin = getOw('ow-tin'); if (tin) obj.tin = tin;
+      const pct = getOw('ow-pct'); if (pct) obj.ownershipPercentage = parseFloat(pct) / 100;
+      return obj;
+    }).filter(o => Object.keys(o).length > 0);
+
+    const obj = { _index: idx + 1 };
+
+    const changeFlag = get('changeFlag');
+    if (changeFlag) obj.changeFlag = changeFlag === 'true';
+
+    obj.id = {};
+    const resCC = get('resCountryCode'); if (resCC) obj.id.resCountryCode = [resCC];
+    const rules = get('rules'); if (rules) obj.id.rules = rules;
+    const name = get('name'); if (name) obj.id.name = name;
+    const tin = get('tin'); if (tin) obj.id.tin = [{ value: tin }];
+    const rTin = get('receivingTin'); if (rTin) obj.id.receivingTin = rTin;
+    const gStatus = get('globeStatus'); if (gStatus) obj.id.globeStatus = gStatus;
+
+    if (ownerships.length) obj.ownership = ownerships;
+
+    const popeIpe = get('popeIpe');
+    const qiirTin = get('qiirTin');
+    const mopeTin = get('mopeTin');
+    if (popeIpe || qiirTin || mopeTin) {
+      obj.qiir = {};
+      if (popeIpe) obj.qiir.popeIpe = popeIpe;
+      if (qiirTin) obj.qiir.exception = { tin: { value: qiirTin } };
+      if (mopeTin) obj.qiir.mopeIpe = { tin: { value: mopeTin } };
+    }
+
+    const art93 = get('art93');
+    const aggOw = get('aggOwnership');
+    const upeOw = get('upeOwnership');
+    if (art93 || aggOw || upeOw) {
+      obj.qutpr = {};
+      if (art93) obj.qutpr.art93 = art93 === 'true';
+      if (aggOw) obj.qutpr.aggOwnership = parseFloat(aggOw) / 100;
+      if (upeOw) obj.qutpr.upeOwnership = upeOw === 'true';
+    }
+
+    return obj;
+  });
+}
+
+function downloadJson() {
+  const result = buildJson();
+  const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ce_data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportJson() {
+  const result = buildJson();
+  const out = document.getElementById('json-output');
+  out.style.display = 'block';
+  out.textContent = JSON.stringify(result, null, 2);
+  out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── 초기화 ────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

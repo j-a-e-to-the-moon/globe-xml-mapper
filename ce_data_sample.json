@@ -1,0 +1,45 @@
+[
+  {
+    "_index": 1,
+    "changeFlag": false,
+    "id": {
+      "resCountryCode": ["KR"],
+      "rules": ["GIR201", "GIR203"],
+      "name": "테스트기업A",
+      "tin": [{ "value": "123-45-67890" }],
+      "receivingTin": "KR-001",
+      "globeStatus": ["GIR301", "GIR310"]
+    },
+    "ownership": [
+      { "ownershipType": "GIR801", "tin": "UPE-TIN-001", "ownershipPercentage": 0.75 },
+      { "ownershipType": "GIR802", "tin": "CE-TIN-002",  "ownershipPercentage": 0.25 }
+    ],
+    "qiir": {
+      "popeIpe": "GIR901",
+      "exception": { "tin": { "value": "QIIR-TIN-001" } }
+    },
+    "qutpr": {
+      "art93": false,
+      "aggOwnership": 0.75,
+      "upeOwnership": true
+    }
+  },
+  {
+    "_index": 2,
+    "id": {
+      "resCountryCode": ["JP"],
+      "rules": ["GIR204"],
+      "name": "테스트기업B",
+      "tin": [{ "value": "JP-TIN-999" }],
+      "globeStatus": ["GIR301"]
+    },
+    "ownership": [
+      { "ownershipType": "GIR801", "tin": "UPE-TIN-001", "ownershipPercentage": 1.0 }
+    ],
+    "qutpr": {
+      "art93": true,
+      "aggOwnership": 1.0,
+      "upeOwnership": true
+    }
+  }
+]
