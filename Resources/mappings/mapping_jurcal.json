@@ -8,6 +8,12 @@
       "description": "Map Jurisdiction",
       "mappings": [
         {
+          "cell": "O5",
+          "target": "<init>.Jurisdiction",
+          "type": "enum:CountryCodeType",
+          "label": "1. 국가명"
+        },
+        {
           "cell": "O6",
           "target": "(unresolved)",
           "type": "string",
@@ -25,6 +31,16 @@
     "3.2.1": {
       "description": "Map321 Overall Computation",
       "mappings": [
+        {
+          "cell": "O62",
+          "target": "(inline)",
+          "label": "1. 「국제조세조정에 관한 법률 시행령」 제111조에 따른 배분 후 당기법인세비용 합계"
+        },
+        {
+          "cell": "O84",
+          "target": "(inline)",
+          "label": "3. 조정대상조세"
+        },
         {
           "cell": "O87",
           "target": "(inline)",
@@ -51,6 +67,36 @@
       "description": "Map322 Transition",
       "mappings": [
         {
+          "cell": "B155",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "K155",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "B159",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "F159",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "K159",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
+          "cell": "O159",
+          "target": "(unresolved)",
+          "type": "string"
+        },
+        {
           "cell": "O151",
           "target": "(unresolved)",
           "type": "decimal",
@@ -61,6 +107,24 @@
     "3.2.2 (2)": {
       "description": "Map322 Recapture",
       "mappings": [
+        {
+          "cell": "O141",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 신고대상 사업연도 개시 전 다섯 번째 사업연도의 환입 적용대상 이연법인세부채 금액"
+        },
+        {
+          "cell": "O142",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 신고대상 사업연도 개시 전 다섯 번째 사업연도의 이연법인세부채 금액으로서 신고대상 사업연도에 환입되는 금액"
+        },
+        {
+          "cell": "O143",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "3. 신고대상 사업연도의 환입 적용대상 이연법인세부채 금액"
+        },
         {
           "cell": "J146",
           "target": "(unresolved)",
@@ -96,6 +160,65 @@
           "target": "(unresolved)",
           "type": "string",
           "label": "c. 「국제조세조정에 관한 법률 시행령」 제113조의2제1항에 따른 비적격잔액 금액"
+        }
+      ]
+    },
+    "3.2.2 (3)": {
+      "description": "Map322 Defer Tax Adjust",
+      "mappings": [
+        {
+          "cell": "O101",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 재계산과 조정 전 글로벌최저한세 기준상 이연법인세비용(「국제조세조정에 관한 법률 시행령」 제112조제1항제1호)"
+        },
+        {
+          "cell": "O102",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "b. 글로벌최저한세 기준으로 계산된 장부가액이 회계상 장부금액과 다른 자산 또는 부채와 관련된 이연법인세비용"
+        },
+        {
+          "cell": "O103",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "c. 글로벌최저한세 기준으로 계산된 자산 또는 부채의 장부가액에 기초한 이연법인세비용"
+        },
+        {
+          "cell": "O104",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "d. 재계산과 조정 전 글로벌최저한세 기준으로 계산된 이연법인세비용"
+        },
+        {
+          "cell": "O105",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "2. 총조정금액"
+        },
+        {
+          "cell": "O106",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "3. 이연법인세비용을 최저한세율로 재계산"
+        },
+        {
+          "cell": "O107",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "f. 최저한세율보다 낮은 세율로 계산된 이연법인세비용과 최저한세율로 재계산된 이연법인세비용 차이"
+        },
+        {
+          "cell": "O108",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "g. 최저한세율보다 높은 세율로 계산된 이연법인세비용과 최저한세율로 재계산된 이연법인세비용 차이"
+        },
+        {
+          "cell": "O109",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "4. 총이연법인세조정금액"
         }
       ]
     },
@@ -188,6 +311,11 @@
       "description": "Map333 Additional Top Up Tax",
       "mappings": [
         {
+          "cell": "M245",
+          "target": "(inline)",
+          "label": "1. 소재지국 조정대상조세(음수)"
+        },
+        {
           "cell": "M246",
           "target": "(inline)",
           "label": "2. 소재지국 순글로벌최저한세결손"
@@ -207,6 +335,11 @@
     "3.3.4": {
       "description": "Map334 Qdmtt",
       "mappings": [
+        {
+          "cell": "K251",
+          "target": "(inline)",
+          "label": "1. 회계기준"
+        },
         {
           "cell": "K252",
           "target": "(inline)",

@@ -4,7 +4,57 @@
   "sourceFile": "Mapping_EntityCe.cs",
   "note": "자동 생성 (GenerateMappingDocs). 개발자 참조용 — 실제 로드 안 됨.",
   "sections": {
+    "MapOneEntity": {
+      "description": "Map One Entity",
+      "mappings": [
+        {
+          "cell": "M15",
+          "target": "(unresolved)",
+          "type": "tin",
+          "label": "1. 구성기업 또는 공동기업그룹 기업의 납세자번호"
+        }
+      ]
+    },
+    "3.2.4": {
+      "description": "Map324a",
+      "mappings": [
+        {
+          "cell": "O4",
+          "target": "ceComp.Elections.SimplCalculations",
+          "type": "bool",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        }
+      ]
+    },
     "3.2.4.2": {
+      "description": "Map3242a",
+      "mappings": [
+        {
+          "cell": "O69",
+          "target": "ceComp.AdjustedIncomeTax.Total",
+          "type": "string",
+          "label": "2.「국제조세조정에 관한 법률 시행령」 제111조에 따른 배분 후 당기법인세비용"
+        },
+        {
+          "cell": "O88",
+          "target": "ceComp.AdjustedCoveredTax.Total",
+          "type": "string",
+          "label": "4. 조정대상조세"
+        }
+      ]
+    },
+    "3.2.4.2 (2)": {
+      "description": "Map3242b",
+      "mappings": [
+        {
+          "cell": "J4",
+          "target": "item.ResCountryCode",
+          "type": "enum:CountryCodeType",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        }
+      ]
+    },
+    "3.2.4.2 (3)": {
       "description": "Map3242c",
       "mappings": [
         {
@@ -54,10 +104,32 @@
       "description": "Map3241b",
       "mappings": [
         {
+          "cell": "C48",
+          "target": "ceComp.AdjustedFanil.Fanil",
+          "type": "string"
+        },
+        {
           "cell": "M16",
           "target": "ceComp.AdjustedFanil.Fanil",
           "type": "string",
           "label": "2. 「국제조세조정에 관한 법률」 제66조제4항부터 제7항까지 및 같은 법 시행령 제107조ㆍ제108조에 따른 배분 후 회계상 순손익"
+        },
+        {
+          "cell": "J4",
+          "target": "item.ResCountryCode",
+          "type": "enum:CountryCodeType",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        }
+      ]
+    },
+    "3.2.4.1 (3)": {
+      "description": "Map3241c",
+      "mappings": [
+        {
+          "cell": "I4",
+          "target": "item.ResCountryCode",
+          "type": "enum:CountryCodeType",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
         }
       ]
     },
@@ -84,9 +156,56 @@
         }
       ]
     },
+    "3.2.4.5": {
+      "description": "Map3245",
+      "mappings": [
+        {
+          "cell": "E4",
+          "target": "a76.InvestmentEntityTin",
+          "type": "tin",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        },
+        {
+          "cell": "G4",
+          "target": "<init>.ActualDeemedDist",
+          "type": "string",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        },
+        {
+          "cell": "K4",
+          "target": "<init>.LocalCreditableTaxGross",
+          "type": "string",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        },
+        {
+          "cell": "N4",
+          "target": "(unresolved)",
+          "type": "string",
+          "label": "1. 귀 다국적기업그룹은 전환기 국가별 간소화 신고체계의 적용을 선택합니까?"
+        }
+      ]
+    },
     "3.4.1": {
       "description": "Map341",
       "mappings": [
+        {
+          "cell": "O171",
+          "target": "(unresolved)",
+          "type": "tin",
+          "label": "1. 추가세액 배분    그룹기업"
+        },
+        {
+          "cell": "O172",
+          "target": "LowTaxJurisdictionTypeLtceIir.NetGlobeIncome",
+          "type": "string",
+          "label": "b. 저율과세구성기업 또는 저율과세 공동기업그룹 기업의 글로벌최저한세소득"
+        },
+        {
+          "cell": "O173",
+          "target": "LowTaxJurisdictionTypeLtceIir.TopUpTax",
+          "type": "string",
+          "label": "c. 저율과세구성기업 또는 저율과세 공동기업그룹 기업의 추가세액"
+        },
         {
           "cell": "O174",
           "target": "(unresolved)",

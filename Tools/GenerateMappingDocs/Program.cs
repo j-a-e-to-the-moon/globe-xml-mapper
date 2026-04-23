@@ -212,8 +212,13 @@ class Program
         return result;
     }
 
-    static readonly Regex CellCommentRegex = new(
-        @"ws\.Cell\s*\(\s*[^,)]+?\s*,\s*\d+\s*\)[^/]*//\s*([A-Z]+\d+)",
+    // ws.Cell(...) 직후 // 주석 안에서 [A-Z]+[0-9]+ 패턴 (셀주소) 을 모두 찾아 마지막 것을 채택.
+    // "// O: +1 국가명 (O5)" → O5 로 인식 (괄호 안의 절대 주소)
+    static readonly Regex CellLineRegex = new(
+        @"ws\.Cell\s*\(\s*[^,)]+?\s*,\s*\d+\s*\)[^/]*//(.+)$",
+        RegexOptions.Compiled);
+    static readonly Regex CellAddrRegex = new(
+        @"\b([A-Z]+\d+)\b",
         RegexOptions.Compiled);
     static readonly Regex CellAssignRegex = new(
         @"\b(\w+)\s*=\s*ws\.Cell\s*\(\s*([^,)]+?)\s*,\s*(\d+)\s*\)",
@@ -232,10 +237,12 @@ class Program
         for (int i = mth.StartLine; i <= mth.EndLine && i < lines.Length; i++)
         {
             var line = lines[i];
-            var cm = CellCommentRegex.Match(line);
+            var cm = CellLineRegex.Match(line);
             if (!cm.Success) continue;
-
-            var cell = cm.Groups[1].Value;
+            // 주석에서 마지막 셀주소 추출 (괄호 안 (O5) 또는 평문 O5)
+            var addrMatches = CellAddrRegex.Matches(cm.Groups[1].Value);
+            if (addrMatches.Count == 0) continue;
+            var cell = addrMatches[addrMatches.Count - 1].Groups[1].Value;
             var am = CellAssignRegex.Match(line);
             var varName = am.Success ? am.Groups[1].Value : "";
 
@@ -558,6 +565,24 @@ class Program
             var label = GetLabelForCell(sheet, absCell);
             var type = InferTypeFromTarget(target);
             sec.Mappings.Add(new MappingEntry(absCell, target, type, label, false));
+        }
+
+        // 추가: FieldMap 외부의 별도 offset 상수 감지 (예: OWNERSHIP_ROW_OFFSET)
+        var extraOffsetRegex = new Regex(
+            @"private\s+const\s+int\s+(\w+_OFFSET)\s*=\s*(\d+)\s*;",
+            RegexOptions.Compiled);
+        foreach (Match em in extraOffsetRegex.Matches(text))
+        {
+            var constName = em.Groups[1].Value;
+            if (constName == "SET_SIZE" || constName == "SET_GAP" ||
+                constName.EndsWith("_SIZE") || constName.EndsWith("_GAP") ||
+                constName.StartsWith("BLOCK")) continue;
+            var offset = int.Parse(em.Groups[2].Value);
+            if (baseRow <= 0) continue;
+            var absCell = $"{ColLetter(col)}{baseRow + offset}";
+            var label = GetLabelForCell(sheet, absCell);
+            sec.Mappings.Add(new MappingEntry(absCell,
+                $"(별도 처리: {constName})", "complex", label, true));
         }
         return sec;
     }
