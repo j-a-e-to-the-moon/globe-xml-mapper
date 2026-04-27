@@ -47,7 +47,9 @@ mapper/
 │   ├── main_template_newest.xlsx      # 단일 통합 템플릿
 │   ├── terms.txt / expired_message.txt / activation_config.json
 │   └── GIR_XML_에러코드_매뉴얼.md
-└── Tools/                          # 개발/검증용 C# 콘솔 도구 (빌드에서 제외됨)
+└── Tools/                          # 콘솔 도구 (빌드 제외)
+    ├── E2EValidate/                # xlsx → XML + XSD 검증 한방
+    └── GenerateMappingDocs/        # Resources/mappings/*.json 갱신
 ```
 
 ## 핵심 클래스

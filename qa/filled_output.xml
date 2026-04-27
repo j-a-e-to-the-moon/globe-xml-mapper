@@ -5,10 +5,10 @@
     <globe:TransmittingCountry>KR</globe:TransmittingCountry>
     <globe:ReceivingCountry>KR</globe:ReceivingCountry>
     <globe:MessageType>GIR</globe:MessageType>
-    <globe:MessageRefId>KR2024KR20260427162559</globe:MessageRefId>
+    <globe:MessageRefId>KR2024KR20260428082035</globe:MessageRefId>
     <globe:MessageTypeIndic>GIR101</globe:MessageTypeIndic>
     <globe:ReportingPeriod>2024-12-31</globe:ReportingPeriod>
-    <globe:Timestamp>2026-04-27T16:25:59.4659753+09:00</globe:Timestamp>
+    <globe:Timestamp>2026-04-28T08:20:35.729975+09:00</globe:Timestamp>
   </globe:MessageSpec>
   <globe:GLOBEBody>
     <globe:FilingInfo>
@@ -31,7 +31,7 @@
       <globe:NameMNE>Hanmi Global Group</globe:NameMNE>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024FI20260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024FI20260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:FilingInfo>
     <globe:GeneralSection>
@@ -205,7 +205,7 @@
       </globe:CorporateStructure>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024GS20260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024GS20260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:GeneralSection>
     <globe:Summary>
@@ -225,7 +225,7 @@
       <globe:GLoBETut>GIR1501</globe:GLoBETut>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024SM020260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024SM020260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:Summary>
     <globe:Summary>
@@ -246,7 +246,7 @@
       <globe:GLoBETut>GIR1501</globe:GLoBETut>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024SM120260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024SM120260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:Summary>
     <globe:Summary>
@@ -271,7 +271,7 @@
       <globe:GLoBETut>GIR1501</globe:GLoBETut>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024SM220260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024SM220260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:Summary>
     <globe:Summary>
@@ -296,7 +296,7 @@
       <globe:GLoBETut>GIR1501</globe:GLoBETut>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024SM320260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024SM320260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:Summary>
     <globe:Summary>
@@ -316,7 +316,7 @@
       <globe:GLoBETut>GIR1502</globe:GLoBETut>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024SM420260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024SM420260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:Summary>
     <globe:JurisdictionSection>
@@ -370,7 +370,7 @@
       </globe:GLoBETax>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024JS020260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024JS020260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:JurisdictionSection>
     <globe:JurisdictionSection>
@@ -427,7 +427,7 @@
       </globe:GLoBETax>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024JS120260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024JS120260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:JurisdictionSection>
     <globe:JurisdictionSection>
@@ -481,7 +481,7 @@
       </globe:GLoBETax>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024JS220260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024JS220260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:JurisdictionSection>
     <globe:JurisdictionSection>
@@ -774,7 +774,7 @@
       </globe:GLoBETax>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024JS320260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024JS320260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:JurisdictionSection>
     <globe:JurisdictionSection>
@@ -1180,7 +1180,7 @@
       </globe:GLoBETax>
       <globe:DocSpec>
         <stf:DocTypeIndic>OECD1</stf:DocTypeIndic>
-        <stf:DocRefId>KR2024JS420260427162559466</stf:DocRefId>
+        <stf:DocRefId>KR2024JS420260428082035730</stf:DocRefId>
       </globe:DocSpec>
     </globe:JurisdictionSection>
   </globe:GLOBEBody>

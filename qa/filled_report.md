@@ -2,7 +2,7 @@
 
 - 입력 파일: `sample/main_template_samle_filled.xlsx`
 - XSD: `Resources/XSD/GLOBEXML_v1.0_KR.xsd`
-- 실행 시각: 2026-04-27 16:25:58
+- 실행 시각: 2026-04-28 08:20:34
 
 ## 1. 매핑 오류
 
@@ -15,7 +15,7 @@
 ## 3. XML 직렬화
 
 - 저장: [qa/filled_output.xml](filled_output.xml)
-- 크기: 58,196 bytes
+- 크기: 58,195 bytes
 
 ## 4. XSD 검증 오류
 
