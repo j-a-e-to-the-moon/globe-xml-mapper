@@ -110,6 +110,8 @@ namespace GlobeMapper.Services
         // 현재 처리 중인 블록 범위 (FindRow 스코프)
         private int _blockStart = 1;
         private int _blockEnd = -1;
+        // ReportingPeriod 종료일 (라벨→연도 매핑용, "신고대상 사업연도" 등)
+        private DateTime _filingPeriodEnd = default;
 
         public override void Map(
             IXLWorksheet ws,
@@ -118,6 +120,9 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
+            // 라벨→연도 매핑 컨텍스트 (Map323DeemedDistTax 등에서 사용)
+            _filingPeriodEnd = globe.GlobeBody?.FilingInfo?.Period?.End ?? default;
+
             // 세로 스택된 "3.1 국가별" 블록을 모두 찾아 각각 처리
             var blockStarts = FindAllBlockStarts(ws);
             if (blockStarts.Count == 0)
@@ -134,6 +139,7 @@ namespace GlobeMapper.Services
             // 블록 컨텍스트 리셋
             _blockStart = 1;
             _blockEnd = -1;
+            _filingPeriodEnd = default;
         }
 
         /// <summary>
@@ -151,6 +157,26 @@ namespace GlobeMapper.Services
                     result.Add(r);
             }
             return result;
+        }
+
+        // 템플릿 라벨("신고대상 사업연도", "직전연도", "직전 N년차")을 연도로 변환.
+        // 기준은 _filingPeriodEnd.Year (FilingInfo.Period.End). 라벨 미인식 시 false.
+        private bool TryMapLabelToYear(string label, out DateTime year)
+        {
+            year = default;
+            if (_filingPeriodEnd == default || string.IsNullOrEmpty(label))
+                return false;
+            var rfy = _filingPeriodEnd.Year;
+            int? offset = null;
+            if (label.Contains("신고대상")) offset = 0;
+            else if (label.Contains("직전연도") || label == "직전 1년차") offset = -1;
+            else if (label.Contains("직전 2년차") || label.Contains("직전 전")) offset = -2;
+            else if (label.Contains("직전 3년차")) offset = -3;
+            else if (label.Contains("직전 4년차")) offset = -4;
+            else if (label.Contains("직전 5년차")) offset = -5;
+            if (!offset.HasValue) return false;
+            year = new DateTime(rfy + offset.Value, 1, 1);
+            return true;
         }
 
         // B열에서 contains 텍스트를 포함하는 행 반환 (-1 = 없음).
@@ -329,7 +355,7 @@ namespace GlobeMapper.Services
             for (int i = 0; i < AdjustmentItems.Length; i++)
             {
                 var amount = ws.Cell(dRow + 5 + i, 15).GetString()?.Trim();
-                if (string.IsNullOrEmpty(amount))
+                if (!HasNonZeroValue(amount))
                     continue;
                 overall.NetGlobeIncome.Adjustments.Add(
                     new Globe.EtrComputationTypeOverallComputationNetGlobeIncomeAdjustments
@@ -362,7 +388,7 @@ namespace GlobeMapper.Services
                 for (int i = 0; i < CoveredTaxAdjItems.Length; i++)
                 {
                     var amount = ws.Cell(row3212 + 4 + i, 15).GetString()?.Trim();
-                    if (string.IsNullOrEmpty(amount))
+                    if (!HasNonZeroValue(amount))
                         continue;
                     overall.AdjustedCoveredTax.Adjustments.Add(
                         new Globe.EtrComputationTypeOverallComputationAdjustedCoveredTaxAdjustments
@@ -460,20 +486,11 @@ namespace GlobeMapper.Services
             // e. ETRRate (O) — 퍼센트(%) 입력 시 /100
             if (!string.IsNullOrEmpty(etrRateRaw))
             {
-                var raw = etrRateRaw.TrimEnd('%').Trim();
-                if (
-                    decimal.TryParse(
-                        raw,
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var rate
-                    )
-                )
-                {
-                    overall.EtrRate = rate > 1m ? rate / 100m : rate;
-                }
+                var rate = ParsePercentage(etrRateRaw);
+                if (rate.HasValue)
+                    overall.EtrRate = rate.Value;
                 else
-                    errors.Add($"[{fileName}] [3.2.1] ETRRate 파싱 실패: '{etrRateRaw}'");
+                    errors.Add($"[{fileName}] [3.2.1] ETRRate 형식 오류: '{etrRateRaw}' (0~1 사이 decimal 입력, 예: 0.15)");
             }
         }
 
@@ -1092,11 +1109,6 @@ namespace GlobeMapper.Services
                         ElectionYear = ey,
                         RevocationYear = ry,
                         RevocationYearSpecified = hasRev,
-                        KEquityInvestmentInclusionElection = "",
-                        QualOwnerIntentBalance = "",
-                        Additions = "",
-                        Reductions = "",
-                        OutstandingBalance = "",
                     };
                 }
             }
@@ -1257,12 +1269,14 @@ namespace GlobeMapper.Services
                     if (string.IsNullOrEmpty(bRaw))
                         break;
 
-                    // B열이 유효한 연도(숫자)가 아니면 스킵 ("직전N년차" 안내 텍스트 등)
+                    // B열: 실제 연도(숫자/날짜) 또는 템플릿 라벨("직전 N년차" / "신고대상 사업연도") 모두 처리
                     DateTime recYear;
                     if (int.TryParse(bRaw, out var yearNum))
                         recYear = new DateTime(yearNum, 1, 1);
                     else if (DateTime.TryParse(bRaw, out var yearDate))
                         recYear = yearDate;
+                    else if (TryMapLabelToYear(bRaw, out var labelYear))
+                        recYear = labelYear;
                     else
                         continue;
 
@@ -1283,17 +1297,18 @@ namespace GlobeMapper.Services
                     if (!hasValues)
                         continue;
 
+                    // XSD required string 필드 — 빈 셀/해당없음(null)은 "0" 기본
                     var rec =
                         new Globe.EtrComputationTypeOverallComputationAdjustedCoveredTaxDeemedDistTaxElectionRecapture
                         {
                             Year = recYear,
-                            StartAmount = cRaw ?? "",
-                            DdtYear3 = fRaw ?? "",
-                            DdtYear2 = iRaw ?? "",
-                            DdtYear1 = kRaw ?? "",
-                            DdtYear0 = mRaw ?? "",
-                            TotalDdt = "", // 폼에 직접 입력칸 없음
-                            EndAmount = pRaw ?? "",
+                            StartAmount = cRaw ?? "0",
+                            DdtYear3 = fRaw ?? "0",
+                            DdtYear2 = iRaw ?? "0",
+                            DdtYear1 = kRaw ?? "0",
+                            DdtYear0 = mRaw ?? "0",
+                            TotalDdt = "0", // 폼에 직접 입력칸 없음 — 0 기본
+                            EndAmount = pRaw ?? "0",
                         };
                     recaptures.Add(rec);
                 }
@@ -1351,26 +1366,16 @@ namespace GlobeMapper.Services
                     el.Recapture.Add(rec);
 
                 if (!string.IsNullOrEmpty(reductionRaw))
-                    el.Reduction = reductionRaw;
+                    el.Reduction = RoundToInteger(reductionRaw);
                 if (!string.IsNullOrEmpty(incrRaw))
-                    el.IncrementalTopUpTax = incrRaw;
-                if (!string.IsNullOrEmpty(ratioRaw))
-                {
-                    var raw = ratioRaw.TrimEnd('%').Trim();
-                    if (
-                        decimal.TryParse(
-                            raw,
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out var ratio
-                        )
-                    )
-                        el.Ratio = ratio > 1m ? ratio / 100m : ratio;
-                    else
-                        errors.Add(
-                            $"[{fileName}] [3.2.3.2(b)] 처분환입비율 파싱 실패: '{ratioRaw}'"
-                        );
-                }
+                    el.IncrementalTopUpTax = RoundToInteger(incrRaw);
+                var ratio = ParsePercentage(ratioRaw);
+                if (ratio.HasValue)
+                    el.Ratio = ratio.Value;
+                else if (!string.IsNullOrEmpty(ratioRaw))
+                    errors.Add(
+                        $"[{fileName}] [3.2.3.2(b)] 처분환입비율 형식 오류: '{ratioRaw}' (0~1 사이 decimal 입력)"
+                    );
             }
         }
 
@@ -1418,17 +1423,15 @@ namespace GlobeMapper.Services
             var excessRaw = ws.Cell(dr, 6).GetString()?.Trim(); // F: 초과이익
             var taxRaw = ws.Cell(dr, 16).GetString()?.Trim(); // P: 추가세액
 
-            if (!string.IsNullOrEmpty(pctRaw))
-            {
-                if (decimal.TryParse(pctRaw, out var pct))
-                    overall.TopUpTaxPercentage = pct;
-                else
-                    errors.Add($"[{fileName}] [3.3.1] 추가세액비율 파싱 실패: '{pctRaw}'");
-            }
+            var topUpPct = ParsePercentage(pctRaw);
+            if (topUpPct.HasValue)
+                overall.TopUpTaxPercentage = topUpPct.Value;
+            else if (!string.IsNullOrEmpty(pctRaw))
+                errors.Add($"[{fileName}] [3.3.1] 추가세액비율 형식 오류: '{pctRaw}' (0~1 사이 decimal 입력, 예: 0.05)");
             if (!string.IsNullOrEmpty(excessRaw))
-                overall.ExcessProfits = excessRaw;
+                overall.ExcessProfits = RoundToInteger(excessRaw);
             if (!string.IsNullOrEmpty(taxRaw))
-                overall.TopUpTax = taxRaw;
+                overall.TopUpTax = RoundToInteger(taxRaw);
         }
 
         // ─── 3.3.2.1 실질기반제외소득 합계 → SubstanceExclusion ──────────────
@@ -1468,29 +1471,26 @@ namespace GlobeMapper.Services
                         new Globe.EtrComputationTypeOverallComputationSubstanceExclusion();
                     var se = overall.SubstanceExclusion;
                     if (!string.IsNullOrEmpty(total))
-                        se.Total = total;
+                        se.Total = RoundToInteger(total);
                     if (!string.IsNullOrEmpty(payrollCost))
-                        se.PayrollCost = payrollCost;
+                        se.PayrollCost = RoundToInteger(payrollCost);
                     if (!string.IsNullOrEmpty(tangibleVal))
-                        se.TangibleAssetValue = tangibleVal;
-                    if (!string.IsNullOrEmpty(payrollMupRaw))
-                    {
-                        if (decimal.TryParse(payrollMupRaw, out var m))
-                            se.PayrollMarkUp = m;
-                        else
-                            errors.Add(
-                                $"[{fileName}] [3.3.2.1] 인건비 반영비율 파싱 실패: '{payrollMupRaw}'"
-                            );
-                    }
-                    if (!string.IsNullOrEmpty(tangibleMupRaw))
-                    {
-                        if (decimal.TryParse(tangibleMupRaw, out var m))
-                            se.TangibleAssetMarkup = m;
-                        else
-                            errors.Add(
-                                $"[{fileName}] [3.3.2.1] 유형자산 반영비율 파싱 실패: '{tangibleMupRaw}'"
-                            );
-                    }
+                        se.TangibleAssetValue = RoundToInteger(tangibleVal);
+                    var pMup = ParsePercentage(payrollMupRaw);
+                    if (pMup.HasValue)
+                        se.PayrollMarkUp = pMup.Value;
+                    else if (!string.IsNullOrEmpty(payrollMupRaw))
+                        errors.Add(
+                            $"[{fileName}] [3.3.2.1] 인건비 반영비율 형식 오류: '{payrollMupRaw}' (0~1 사이 decimal 입력, 예: 0.05)"
+                        );
+
+                    var tMup = ParsePercentage(tangibleMupRaw);
+                    if (tMup.HasValue)
+                        se.TangibleAssetMarkup = tMup.Value;
+                    else if (!string.IsNullOrEmpty(tangibleMupRaw))
+                        errors.Add(
+                            $"[{fileName}] [3.3.2.1] 유형자산 반영비율 형식 오류: '{tangibleMupRaw}' (0~1 사이 decimal 입력, 예: 0.05)"
+                        );
                 }
             }
 
@@ -1537,13 +1537,13 @@ namespace GlobeMapper.Services
                                 new Globe.EtrComputationTypeOverallComputationSubstanceExclusionPeAllocationPayrollCost
                                 {
                                     Total = payRaw,
-                                    Allocation = paAlRaw ?? "",
+                                    Allocation = paAlRaw ?? "0",
                                 },
                             TangibleAssetValue =
                                 new Globe.EtrComputationTypeOverallComputationSubstanceExclusionPeAllocationTangibleAssetValue
                                 {
-                                    Total = tanRaw ?? "",
-                                    Allocation = taAlRaw ?? "",
+                                    Total = tanRaw ?? "0",
+                                    Allocation = taAlRaw ?? "0",
                                 },
                         }
                     );
@@ -1592,13 +1592,13 @@ namespace GlobeMapper.Services
                                 new Globe.EtrComputationTypeOverallComputationSubstanceExclusionFteAllocationPayrollCost
                                 {
                                     Total = payRaw,
-                                    Allocation = paAlRaw ?? "",
+                                    Allocation = paAlRaw ?? "0",
                                 },
                             TangibleAssetValue =
                                 new Globe.EtrComputationTypeOverallComputationSubstanceExclusionFteAllocationTangibleAssetValue
                                 {
-                                    Total = tanRaw ?? "",
-                                    Allocation = taAlRaw ?? "",
+                                    Total = tanRaw ?? "0",
+                                    Allocation = taAlRaw ?? "0",
                                 },
                         }
                     );
@@ -1636,7 +1636,7 @@ namespace GlobeMapper.Services
                     if (!DateTime.TryParse(yearRaw, out var year) && !int.TryParse(yearRaw, out _))
                     {
                         errors.Add($"[{fileName}] [3.3.3.1] 행{r} 사업연도 파싱 실패: '{yearRaw}'");
-                        r -= 1; // r += 2로 맞추기 위해 보정
+                        // for 루프의 r += 2가 자동으로 다음 쌍으로 진행 — 추가 보정 불필요
                         continue;
                     }
                     if (int.TryParse(yearRaw, out var yi))
@@ -1650,7 +1650,7 @@ namespace GlobeMapper.Services
                         new Globe.EtrComputationTypeOverallComputationAdditionalTopUpTaxNonArt415
                         {
                             Year = year,
-                            AdditionalTopUpTax = Cell(ws, r, 17) ?? "", // Q: 당기추가세액가산액
+                            AdditionalTopUpTax = RoundToInteger(Cell(ws, r, 17)) ?? "0", // Q: 당기추가세액가산액
                         };
 
                     foreach (
@@ -1668,49 +1668,37 @@ namespace GlobeMapper.Services
                             );
                     }
 
-                    // Previous (당초신고, 행 r)
+                    // Previous (당초신고, 행 r) — XSD required xs:integer 필드는 "0" 기본
                     entry.Previous =
                         new Globe.EtrComputationTypeOverallComputationAdditionalTopUpTaxNonArt415Previous
                         {
-                            NetGlobeIncome = Cell(ws, r, 7) ?? "", // G
-                            AdjustedCoveredTax = Cell(ws, r, 10) ?? "", // J
-                            ExcessProfits = Cell(ws, r, 12) ?? "", // L
-                            TopUpTax = Cell(ws, r, 15) ?? "", // O
+                            NetGlobeIncome = RoundToInteger(Cell(ws, r, 7)) ?? "0", // G
+                            AdjustedCoveredTax = RoundToInteger(Cell(ws, r, 10)) ?? "0", // J
+                            ExcessProfits = RoundToInteger(Cell(ws, r, 12)) ?? "0", // L
+                            TopUpTax = RoundToInteger(Cell(ws, r, 15)) ?? "0", // O
                         };
                     var prevEtrRaw = Cell(ws, r, 11); // K
                     var prevPctRaw = Cell(ws, r, 14); // N
-                    if (
-                        !string.IsNullOrEmpty(prevEtrRaw)
-                        && decimal.TryParse(prevEtrRaw, out var pEtr)
-                    )
-                        entry.Previous.EtrRate = pEtr;
-                    if (
-                        !string.IsNullOrEmpty(prevPctRaw)
-                        && decimal.TryParse(prevPctRaw, out var pPct)
-                    )
-                        entry.Previous.TopUpTaxPercentage = pPct;
+                    var pEtr = ParsePercentage(prevEtrRaw);
+                    if (pEtr.HasValue) entry.Previous.EtrRate = pEtr.Value;
+                    var pPct = ParsePercentage(prevPctRaw);
+                    if (pPct.HasValue) entry.Previous.TopUpTaxPercentage = pPct.Value;
 
-                    // Recalculated (재계산, 행 r+1)
+                    // Recalculated (재계산, 행 r+1) — XSD required xs:integer 필드는 "0" 기본
                     entry.Recalculated =
                         new Globe.EtrComputationTypeOverallComputationAdditionalTopUpTaxNonArt415Recalculated
                         {
-                            NetGlobeIncome = Cell(ws, r + 1, 7) ?? "", // G
-                            AdjustedCoveredTax = Cell(ws, r + 1, 10) ?? "", // J
-                            ExcessProfits = Cell(ws, r + 1, 12) ?? "", // L
-                            TopUpTax = Cell(ws, r + 1, 15) ?? "", // O
+                            NetGlobeIncome = RoundToInteger(Cell(ws, r + 1, 7)) ?? "0", // G
+                            AdjustedCoveredTax = RoundToInteger(Cell(ws, r + 1, 10)) ?? "0", // J
+                            ExcessProfits = RoundToInteger(Cell(ws, r + 1, 12)) ?? "0", // L
+                            TopUpTax = RoundToInteger(Cell(ws, r + 1, 15)) ?? "0", // O
                         };
                     var recEtrRaw = Cell(ws, r + 1, 11);
                     var recPctRaw = Cell(ws, r + 1, 14);
-                    if (
-                        !string.IsNullOrEmpty(recEtrRaw)
-                        && decimal.TryParse(recEtrRaw, out var rEtr)
-                    )
-                        entry.Recalculated.EtrRate = rEtr;
-                    if (
-                        !string.IsNullOrEmpty(recPctRaw)
-                        && decimal.TryParse(recPctRaw, out var rPct)
-                    )
-                        entry.Recalculated.TopUpTaxPercentage = rPct;
+                    var rEtr = ParsePercentage(recEtrRaw);
+                    if (rEtr.HasValue) entry.Recalculated.EtrRate = rEtr.Value;
+                    var rPct = ParsePercentage(recPctRaw);
+                    if (rPct.HasValue) entry.Recalculated.TopUpTaxPercentage = rPct.Value;
 
                     overall.AdditionalTopUpTax ??=
                         new Globe.EtrComputationTypeOverallComputationAdditionalTopUpTax();
@@ -1732,22 +1720,27 @@ namespace GlobeMapper.Services
                 var expRaw = rExp >= 0 ? ws.Cell(rExp, 13).GetString()?.Trim() : null; // M247
                 var addRaw = rAdd >= 0 ? ws.Cell(rAdd, 13).GetString()?.Trim() : null; // M248
 
+                // Art4.1.5는 NetGlobeIncome이 음수(loss)일 때 보고하는 특례.
+                // 모든 값이 0/빈 값이면 보고 의도 없음 — emit 자체 생략.
+                // (검증 70089: AdjustedCoveredTax는 음수, 70090: GlobeLoss = NetGlobeIncome.Total)
                 bool hasArt415 =
-                    !string.IsNullOrEmpty(actRaw)
-                    || !string.IsNullOrEmpty(lossRaw)
-                    || !string.IsNullOrEmpty(expRaw)
-                    || !string.IsNullOrEmpty(addRaw);
+                    HasNonZeroValue(actRaw)
+                    || HasNonZeroValue(lossRaw)
+                    || HasNonZeroValue(expRaw)
+                    || HasNonZeroValue(addRaw);
                 if (hasArt415)
                 {
                     overall.AdditionalTopUpTax ??=
                         new Globe.EtrComputationTypeOverallComputationAdditionalTopUpTax();
+                    // Art4.1.5는 4개 필드 모두 XSD required. 사용자 입력이 일부만 있으면
+                    // 누락 필드(빈 셀 또는 null)는 "0" 기본값으로 채워 XSD 유효성 보장.
                     overall.AdditionalTopUpTax.Art415 =
                         new Globe.EtrComputationTypeOverallComputationAdditionalTopUpTaxArt415
                         {
-                            AdjustedCoveredTax = actRaw ?? "",
-                            GlobeLoss = lossRaw ?? "",
-                            ExpectedAdjustedCoveredTax = expRaw ?? "",
-                            AdditionalTopUpTax = addRaw ?? "",
+                            AdjustedCoveredTax = NullIfEmpty(RoundToInteger(actRaw)) ?? "0",
+                            GlobeLoss = NullIfEmpty(RoundToInteger(lossRaw)) ?? "0",
+                            ExpectedAdjustedCoveredTax = NullIfEmpty(RoundToInteger(expRaw)) ?? "0",
+                            AdditionalTopUpTax = NullIfEmpty(RoundToInteger(addRaw)) ?? "0",
                         };
                 }
             }
@@ -1803,20 +1796,18 @@ namespace GlobeMapper.Services
             if (!string.IsNullOrEmpty(fasRaw))
                 q.Fas = fasRaw;
             if (!string.IsNullOrEmpty(amtRaw))
-                q.Amount = amtRaw;
+                q.Amount = RoundToInteger(amtRaw);
             if (!string.IsNullOrEmpty(basisRaw))
                 q.BasisforBlending = basisRaw;
 
-            if (!string.IsNullOrEmpty(rateRaw))
+            var minRate = ParsePercentage(rateRaw);
+            if (minRate.HasValue)
             {
-                if (decimal.TryParse(rateRaw, out var rate))
-                {
-                    q.MinRate = rate;
-                    q.MinRateSpecified = true;
-                }
-                else
-                    errors.Add($"[{fileName}] [3.3.4] 최저한세율 파싱 실패: '{rateRaw}'");
+                q.MinRate = minRate.Value;
+                q.MinRateSpecified = true;
             }
+            else if (!string.IsNullOrEmpty(rateRaw))
+                errors.Add($"[{fileName}] [3.3.4] 최저한세율 형식 오류: '{rateRaw}' (0~1 사이 decimal 입력, 예: 0.15)");
 
             if (!string.IsNullOrEmpty(curRaw))
             {
@@ -1832,7 +1823,7 @@ namespace GlobeMapper.Services
                 q.DeMinAvailable = ParseBool(deMinRaw);
 
             // CurrencyElection (있는 경우) — Currency는 CurrencyEnumType
-            if (!string.IsNullOrEmpty(curElCurRaw) && DateTime.TryParse(curElSelRaw, out var selY))
+            if (!string.IsNullOrEmpty(curElCurRaw) && TryParseDate(curElSelRaw, out var selY))
             {
                 if (TryParseEnum<Globe.CurrencyEnumType>(curElCurRaw, out var elCur))
                 {
@@ -1844,7 +1835,7 @@ namespace GlobeMapper.Services
 
                     if (
                         !string.IsNullOrEmpty(curElRevRaw)
-                        && DateTime.TryParse(curElRevRaw, out var revY)
+                        && TryParseDate(curElRevRaw, out var revY)
                     )
                     {
                         q.CurrencyElection.RevocationYear = revY;
@@ -1883,11 +1874,11 @@ namespace GlobeMapper.Services
             var totalQualAncRaw = r3 >= 0 ? ws.Cell(r3, 14).GetString()?.Trim() : null; // N216
             var excessCapRaw = r4 >= 0 ? ws.Cell(r4, 14).GetString()?.Trim() : null; // N217
 
+            // 의미있는 해운소득(국제해운/적격부수) 둘 중 하나라도 0 아닌 값이 있을 때만 생성
+            // FiftyPercentCap/ExcessOfCap만 "0"으로 채워진 경우는 빈 구조체로 간주
             bool hasData =
-                !string.IsNullOrEmpty(totalIntShipRaw)
-                || !string.IsNullOrEmpty(fiftyCapRaw)
-                || !string.IsNullOrEmpty(totalQualAncRaw)
-                || !string.IsNullOrEmpty(excessCapRaw);
+                HasNonZeroValue(totalIntShipRaw)
+                || HasNonZeroValue(totalQualAncRaw);
             if (!hasData)
                 return;
 
@@ -1917,11 +1908,11 @@ namespace GlobeMapper.Services
             overall.NetGlobeIncome.IntShippingIncome =
                 new Globe.EtrComputationTypeOverallComputationNetGlobeIncomeIntShippingIncome
                 {
-                    Total = totalRaw,
-                    TotalIntShipIncome = totalIntShipRaw ?? "",
-                    FiftyPercentCap = fiftyCapRaw ?? "",
-                    TotalQualifiedAncIncome = totalQualAncRaw ?? "",
-                    ExcessOfCap = string.IsNullOrEmpty(excessCapRaw) ? null : excessCapRaw,
+                    Total = NullIfEmpty(totalRaw),
+                    TotalIntShipIncome = NullIfEmpty(totalIntShipRaw),
+                    FiftyPercentCap = NullIfEmpty(fiftyCapRaw),
+                    TotalQualifiedAncIncome = NullIfEmpty(totalQualAncRaw),
+                    ExcessOfCap = NullIfEmpty(excessCapRaw),
                 };
         }
     }

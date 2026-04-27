@@ -12,10 +12,7 @@
 ```
 
 ## 숨김시트 (_META)
-```
-blockCount:{시트명}   |  값(정수)
-```
-시트별 블록 수 보존용. `EnsureMetaSheet()`가 자동 생성/유지.
+xlsx에 잔존하지만 코드에서는 사용하지 않음. 모든 매퍼가 B열 헤더 텍스트("3.1 국가별 글로벌", "2.1 국가별 기본사항" 등)로 블록을 동적 탐지함. 향후 새 시트가 META를 다시 도입할 일이 없다면 시트 자체를 삭제해도 무관.
 
 ## 프로젝트 구조
 ```
@@ -25,9 +22,9 @@ mapper/
 ├── MainForm.cs                     # 메인 화면 (템플릿 다운로드 / XML 변환)
 ├── TermsDialog.cs
 ├── Services/
-│   ├── TemplateMeta.cs             # 섹션→시트 매핑 + _META 시트 읽기 (정적)
+│   ├── TemplateMeta.cs             # 섹션→시트 처리 순서 (정적)
 │   ├── MappingBase.cs              # 공통 유틸 (ParseTin, ParseBool 등)
-│   ├── EntityGroupMap.cs           # "기업매핑" 시트 리더 (entity TIN → 국가/하위그룹)
+│   ├── EntityGroupMap.cs           # "구성기업" 시트 리더 (entity TIN → 국가/하위그룹)
 │   ├── Mapping_1.1~1.2.cs
 │   ├── Mapping_1.3.1.cs            # UPE
 │   ├── Mapping_1.3.2.1.cs          # CE (O11 통합 셀 소유지분)
@@ -47,7 +44,7 @@ mapper/
 │   ├── mappings/                   # 매핑 JSON
 │   │                               # - mapping_1.1~1.2.json: 실제 로드 (MappingBase.Sections 사용)
 │   │                               # - 나머지: 개발자 참조용 (Tools/GenerateMappingDocs 로 재생성)
-│   ├── main_template.xlsx          # 단일 통합 템플릿
+│   ├── main_template_newest.xlsx      # 단일 통합 템플릿
 │   ├── terms.txt / expired_message.txt / activation_config.json
 │   └── GIR_XML_에러코드_매뉴얼.md
 └── Tools/                          # 개발/검증용 C# 콘솔 도구 (빌드에서 제외됨)
@@ -57,11 +54,9 @@ mapper/
 
 ### TemplateMeta (Services/TemplateMeta.cs)
 - `SheetMap` — (섹션키, 시트명) 처리 순서 배열 (JurCal이 EntityCe보다 먼저 — JurisdictionSection 선행 생성 보장)
-- `MetaSheetName` — `_META` 상수
-- `ReadBlockCount(metaWs, sheetName)` — `blockCount:{시트명}` 키 조회 (없으면 1)
 
 ### MappingOrchestrator
-- `MapWorkbook(filePath, globe)` — 단일 main_template.xlsx 기반 매핑 (폴더/group/entity 개념 없음)
+- `MapWorkbook(filePath, globe)` — 단일 main_template_newest.xlsx 기반 매핑 (폴더/group/entity 개념 없음)
 
 ### 매핑 행 탐색 원칙 (Mapping_JurCal 등)
 - **절대 행번호 금지** — 행 삽입/삭제에 취약하므로 반드시 `FindRow(ws, "헤더텍스트")` 로 위치를 동적 탐색
@@ -74,7 +69,7 @@ mapper/
 - 소유지분은 블록 내 O11 통합 셀(offset 8, 병합 O11:R14)에 인라인 입력 — 별첨 시트 없음
   - 포맷: `유형,TIN,TIN유형,발급국가,지분` × N (주주 구분: `;`)
   - 예: `GIR801, 1234567890, GIR3001, KR, 1; GIR802, 987, GIR3001, KR, 0.5`
-- Mapping_1.3.2.1이 blockCount 기반으로 N개 CE 순회, O12에서 Ownership 파싱
+- Mapping_1.3.2.1이 B열 "1.3.2.1" 헤더 기반으로 N개 CE 순회, O12에서 Ownership 파싱
 
 ### 세로 스택 블록 (국가별 계산 / 구성기업 계산)
 - `국가별 계산` 시트: "3.1 국가별" 헤더마다 새 합산단위 블록 (259행 단위)
@@ -83,8 +78,9 @@ mapper/
   - 블록 탐지 → 각 블록마다 `_blockStart/_blockEnd` 설정 → 하위 Map*() 메서드 호출
   - FindRow는 블록 범위 내에서만 검색 (전역 검색 방지)
 
-### 기업매핑 시트 (main_template.xlsx)
-- B: 기업 납세자번호 / C: 국가명 (ISO2) / D: 하위그룹 유형 / E: 하위그룹 최상위기업 TIN
+### 구성기업 시트 (main_template_newest.xlsx)
+- D: 기업 납세자번호 / E: 국가명 (ISO2) / F: 하위그룹 유형 / H: 하위그룹 최상위기업 TIN
+- 헤더: 3행, 데이터: 4행~
 - Mapping_EntityCe가 각 entity 블록의 TIN 값으로 조회 → 해당 JurisdictionSection(국가) + ETR(하위그룹 TIN) 찾기
 - `EntityGroupMap.Load(workbook)`가 시트 읽기 캡슐화
 
@@ -156,7 +152,38 @@ mapper/
 
 ### ValidationUtil.cs 검증 커버리지
 - **구현됨**: 60001/03/04/11~13/15~23, 70001~03/05/07/09~21/26~28/32~34/38~40/60, 70030/31, 70041~49/53/54, 70060~92, 70101~105
+- **추가**: [형식경고] TIN 형식 — 영숫자/하이픈/점/슬래시만 허용 (회사명 차단), OwnershipChange.PreOwnership.Tin 포함
 - **미구현**: 70037(Subgroup TIN 일치), 70077/82(DeferTaxAdjustAmt 구조 복잡), 70097~100(3.4 IIR/UTPR 계산 — 구조 확인 필요)
+
+### 빈 XML 요소 회피 규칙
+XSD에서 금액 필드 대부분이 `xs:integer`이라 `<element />` 빈 요소는 검증 실패. 매퍼에서 string 필드 설정 시:
+- ❌ `Field = raw ?? ""` — 빈 자기닫기 요소 emit
+- ✅ `Field = NullIfEmpty(raw)` — null이면 요소 자체 생략 (선택[O] 필드)
+- ✅ `Field = raw ?? "0"` — XSD required[R] xs:integer 필드는 0 기본 (Recapture, NonArt415, PE/FTE Allocation 등)
+- ✅ Amount 컬렉션은 `HasNonZeroValue(raw)`로 가드 — "-0" 회피
+- ✅ 부모 구조체(IntShippingIncome, DeferTaxAdjustAmt 등) 데이터 유무 체크 후 생성
+
+### Enum 파싱 주의
+- `Enum.TryParse`는 숫자 문자열("25000")도 통과시켜 정의되지 않은 enum 값 생성 — 직렬화 단계에서 InvalidOperationException
+- `MappingBase.TryParseEnumCore`는 `Enum.IsDefined`로 추가 검증
+
+### 비율(%) 파싱 규칙 (엄격 모드)
+- XSD percentage = decimal Range(0,1), fractionDigits=4
+- ✅ `MappingBase.ParsePercentage(raw)` 헬퍼 사용 — null 반환이면 빈/파싱실패/범위벗어남
+- **입력 규칙**: 반드시 0~1 사이 decimal — 1=100%, 0.5=50%, 0.05=5%, 0.01=1%, 0=0%
+- 범위 벗어남(`"5"`, `"1.5"`, `"100"`)이나 % 표기(`"5%"`, `"100%"`) 모두 거부 → null
+- 호출자: `if (p.HasValue) target.Field = p.Value; else if (!string.IsNullOrEmpty(raw)) errors.Add(...)`
+- ⚠️ Excel "백분율" 셀서식 사용 시 ClosedXML이 "5%" 문자열을 반환할 수 있음 — 셀서식을 "숫자"로 통일하거나 처음부터 0.05를 입력하도록 안내
+
+### 수식 평가 (ClosedXML)
+- `MappingOrchestrator.MapWorkbook`이 워크북 로드 직후 `RecalculateAllFormulas()` 호출
+- xlsx가 Excel에서 한번도 저장 안 된 상태(formula 캐시 비어있음)에서도 매퍼가 수식 결과를 읽을 수 있게 보장
+- 실패 시 경고 추가 후 cached value 폴백 (throw 안 함)
+
+### 라벨→연도 매핑 (Mapping_JurCal)
+- `Map323DeemedDistTax`의 환입계정 표 B열은 "신고대상 사업연도"/"직전 N년차" 같은 한국어 라벨이 기본 입력값
+- `_filingPeriodEnd` 인스턴스 필드 + `TryMapLabelToYear` 헬퍼로 `FilingInfo.Period.End.Year` 기준 변환
+- 라벨 미인식 시 (사용자가 실제 연도 숫자로 덮어쓴 경우) `int.TryParse`/`DateTime.TryParse`로 폴백
 
 ## 참고
 Globe.cs 대신에 Globe요약.md 참고하면 편함

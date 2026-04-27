@@ -7,8 +7,8 @@ namespace GlobeMapper.Services
 {
     /// <summary>
     /// 시트 2: 국가별 적용면제 및 제외.
-    /// 블록1(2~22) + 간격(2행) + 블록2(25~53) = 52행 세트.
-    /// blockCount 기반으로 N개 국가 순회.
+    /// 블록1(b1~b1+20) + 간격(2행) + 블록2(b2~b2+28) = 52행 세트.
+    /// 다른 매퍼와 동일하게 B열 헤더("2.1 국가별 기본사항") 탐색으로 다중 블록 처리.
     ///
     /// 검증된 행 오프셋 (b1=2, b2=25 기준):
     ///   2.1  : O(b1+3)=국가, O(b1+6)=과세권국가
@@ -22,11 +22,10 @@ namespace GlobeMapper.Services
     /// </summary>
     public class Mapping_2 : MappingBase
     {
-        private const int BLOCK1_START = 2;
-        private const int BLOCK1_SIZE = 21; // rows 2~22 (inclusive)
-        private const int GAP = 2; // rows 23~24
-        private const int SET_SIZE = 52; // 21+2+29
-        private const int SET_GAP = 2; // 세트 간 간격
+        private const string BLOCK_ANCHOR = "2.1 국가별 기본사항"; // b1+2 위치의 헤더
+        private const int ANCHOR_TO_B1_OFFSET = 2; // b1 = 앵커행 - 2
+        private const int BLOCK1_SIZE = 21; // 21행 (b1 ~ b1+20)
+        private const int GAP = 2; // b1+21, b1+22 (블록1과 블록2 사이)
 
         public Mapping_2()
             : base(null) { }
@@ -38,16 +37,28 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
-            var blockCount = 1;
-            if (ws.Workbook.TryGetWorksheet(TemplateMeta.MetaSheetName, out var metaWs))
-                blockCount = TemplateMeta.ReadBlockCount(metaWs, ws.Name);
-
-            for (int idx = 0; idx < blockCount; idx++)
+            var blockStarts = FindAllBlockStarts(ws);
+            for (int idx = 0; idx < blockStarts.Count; idx++)
             {
-                var b1 = BLOCK1_START + idx * (SET_SIZE + SET_GAP);
+                var b1 = blockStarts[idx];
                 var b2 = b1 + BLOCK1_SIZE + GAP;
                 MapOneCountry(ws, globe, errors, fileName, b1, b2, idx + 1);
             }
+        }
+
+        // B열에서 BLOCK_ANCHOR 텍스트를 포함하는 행을 모두 찾아 b1으로 변환.
+        // 각 적용면제 블록은 b1=앵커행-2 위치에서 시작.
+        private static List<int> FindAllBlockStarts(IXLWorksheet ws)
+        {
+            var result = new List<int>();
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 200;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var v = ws.Cell(r, 2).GetString()?.Trim() ?? "";
+                if (v.Contains(BLOCK_ANCHOR))
+                    result.Add(r - ANCHOR_TO_B1_OFFSET);
+            }
+            return result;
         }
 
         private void MapOneCountry(
@@ -176,15 +187,18 @@ namespace GlobeMapper.Services
             var initOtherJurRaw = ws.Cell(b2 + 21, 13).GetString()?.Trim(); // M46 (통합 셀)
 
             // ─── ETR / InitialIntActivity 데이터 유무 판단 ────────────────
+            // "0" 값만 입력된 셀은 데이터 없음으로 간주 (HasNonZeroValue).
+            // 그렇지 않으면 사용자가 세이프하버 체크박스 안 했는데도 0으로 채워진 셀 때문에
+            // Deminimis 구조가 잘못 생성됨.
             bool hasDemini =
                 deminiBasis.HasValue
-                || !string.IsNullOrEmpty(f1GbRev)
-                || !string.IsNullOrEmpty(f1AcRev)
-                || !string.IsNullOrEmpty(s1Rev);
+                || HasNonZeroValue(f1GbRev)
+                || HasNonZeroValue(f1AcRev)
+                || HasNonZeroValue(s1Rev);
             bool hasCbcr =
-                !string.IsNullOrEmpty(cbcrRev)
-                || !string.IsNullOrEmpty(cbcrPl)
-                || !string.IsNullOrEmpty(cbcrTax);
+                HasNonZeroValue(cbcrRev)
+                || HasNonZeroValue(cbcrPl)
+                || HasNonZeroValue(cbcrTax);
             bool hasUtpr = !string.IsNullOrEmpty(utprRate);
             bool hasEtrData = hasDemini || hasCbcr || hasUtpr;
             bool hasInit = !string.IsNullOrEmpty(initStartRaw);
@@ -272,10 +286,10 @@ namespace GlobeMapper.Services
                             dmCalc.Average =
                                 new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcAverage
                                 {
-                                    Revenue = faAcRev,
-                                    GlobeRevenue = faGbRev ?? "",
-                                    NetGlobeIncome = faGbPl ?? "",
-                                    Fanil = faAcPl ?? "",
+                                    Revenue = NullIfEmpty(faAcRev),
+                                    GlobeRevenue = NullIfEmpty(faGbRev),
+                                    NetGlobeIncome = NullIfEmpty(faGbPl),
+                                    Fanil = NullIfEmpty(faAcPl),
                                 };
                         }
                     }
@@ -287,13 +301,14 @@ namespace GlobeMapper.Services
 
                         if (!string.IsNullOrEmpty(saRev) || !string.IsNullOrEmpty(saTax))
                         {
+                            // 간소화: Revenue=GlobeRevenue, NetGlobeIncome=FANIL 복제 (XSD required)
                             dmCalc.Average =
                                 new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcAverage
                                 {
-                                    Revenue = saRev,
-                                    GlobeRevenue = "",
-                                    NetGlobeIncome = saTax ?? "",
-                                    Fanil = "",
+                                    Revenue = NullIfEmpty(saRev),
+                                    GlobeRevenue = NullIfEmpty(saRev),
+                                    NetGlobeIncome = NullIfEmpty(saTax),
+                                    Fanil = NullIfEmpty(saTax),
                                 };
                         }
                     }
@@ -307,33 +322,27 @@ namespace GlobeMapper.Services
                     exception.TransitionalCbCrSafeHarbour =
                         new Globe.EtrTypeEtrStatusEtrExceptionTransitionalCbCrSafeHarbour
                         {
-                            Revenue = cbcrRev,
-                            Profit = cbcrPl ?? "",
-                            IncomeTax = cbcrTax,
+                            Revenue = NullIfEmpty(cbcrRev),
+                            Profit = NullIfEmpty(cbcrPl),
+                            IncomeTax = NullIfEmpty(cbcrTax),
                         };
                 }
 
                 // UtprSafeHarbour
                 if (hasUtpr)
                 {
-                    if (
-                        decimal.TryParse(
-                            utprRate.TrimEnd('%').Trim(),
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out var citRate
-                        )
-                    )
+                    var citRate = ParsePercentage(utprRate);
+                    if (citRate.HasValue)
                     {
                         exception.UtprSafeHarbour =
                             new Globe.EtrTypeEtrStatusEtrExceptionUtprSafeHarbour
                             {
-                                CitRate = citRate > 1m ? citRate / 100m : citRate,
+                                CitRate = citRate.Value,
                             };
                     }
                     else
                     {
-                        errors.Add($"[{fileName}] [{loc}/UTPR] CIT율 파싱 실패: '{utprRate}'");
+                        errors.Add($"[{fileName}] [{loc}/UTPR] CIT율 형식 오류: '{utprRate}' (0~1 사이 decimal 입력, 예: 0.15)");
                     }
                 }
 
@@ -341,7 +350,7 @@ namespace GlobeMapper.Services
             }
 
             // ─── InitialIntActivity (2.3) ─────────────────────────────────
-            if (hasInit && DateTime.TryParse(initStartRaw, out var startDate))
+            if (hasInit && TryParseDate(initStartRaw, out var startDate))
             {
                 var init = new Globe.InitialIntActivityType { StartDate = startDate };
 
@@ -353,7 +362,7 @@ namespace GlobeMapper.Services
                             new Globe.InitialIntActivityTypeReferenceJurisdiction
                             {
                                 ResCountryCode = refCode,
-                                TangibleAssetValue = initRefAsset ?? "",
+                                TangibleAssetValue = initRefAsset ?? "0",
                             };
                     }
                     else
@@ -555,10 +564,10 @@ namespace GlobeMapper.Services
                 new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcFinancialData
                 {
                     Year = year,
-                    Revenue = revenue,
-                    GlobeRevenue = globeRevenue ?? "",
-                    NetGlobeIncome = netGlobeIncome ?? "",
-                    Fanil = fanil ?? "",
+                    Revenue = NullIfEmpty(revenue),
+                    GlobeRevenue = NullIfEmpty(globeRevenue),
+                    NetGlobeIncome = NullIfEmpty(netGlobeIncome),
+                    Fanil = NullIfEmpty(fanil),
                 }
             );
         }
@@ -573,14 +582,17 @@ namespace GlobeMapper.Services
             if (string.IsNullOrEmpty(revenue) && string.IsNullOrEmpty(simplifiedTax))
                 return;
 
+            // 간소화 세이프하버 데이터는 CbCR 기반이라 GlobeRevenue/FANIL 별도값 없음.
+            // XSD에서 GlobeRevenue/NetGlobeIncome/FANIL 모두 required이므로
+            // 간소화 입력값을 그대로 복제 (Revenue=GlobeRevenue, NetGlobeIncome=FANIL).
             dmCalc.FinancialData.Add(
                 new Globe.EtrTypeEtrStatusEtrExceptionDeminimisSimplifiedNmceCalcFinancialData
                 {
                     Year = year,
-                    Revenue = revenue,
-                    GlobeRevenue = "",
-                    NetGlobeIncome = simplifiedTax ?? "",
-                    Fanil = "",
+                    Revenue = NullIfEmpty(revenue),
+                    GlobeRevenue = NullIfEmpty(revenue),
+                    NetGlobeIncome = NullIfEmpty(simplifiedTax),
+                    Fanil = NullIfEmpty(simplifiedTax),
                 }
             );
         }

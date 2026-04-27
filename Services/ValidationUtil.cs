@@ -27,8 +27,49 @@ namespace GlobeMapper.Services
             ValidateSafeHarbourCompleteness(globe, errors);
             ValidateJurisdictionSection(globe, errors);
             ValidateUtprAttribution(globe, errors);
+            ValidateDeminimisDataPresence(globe, errors);
 
             return errors;
+        }
+
+        /// <summary>
+        /// [데이터경고] Deminimis 세이프하버(GIR2901/GIR2902) 선택 시 financial 데이터 모두 0이면 경고.
+        /// XSD는 valid이지만 사용자가 CbCR 수치를 안 채웠을 가능성 큼.
+        /// </summary>
+        private static void ValidateDeminimisDataPresence(Globe.GlobeOecd globe, List<string> errors)
+        {
+            if (globe.GlobeBody?.JurisdictionSection == null) return;
+
+            foreach (var js in globe.GlobeBody.JurisdictionSection)
+            {
+                var jur = js.Jurisdiction.ToString().ToUpper();
+                foreach (var etr in js.GLoBeTax?.Etr ?? Enumerable.Empty<Globe.EtrType>())
+                {
+                    var dm = etr.EtrStatus?.EtrException?.DeminimisSimplifiedNmceCalc;
+                    if (dm == null) continue;
+
+                    bool hasNonZero = false;
+                    foreach (var fd in dm.FinancialData)
+                    {
+                        if (TryParseDec(fd.Revenue, out var r) && r != 0) { hasNonZero = true; break; }
+                        if (TryParseDec(fd.GlobeRevenue, out var gr) && gr != 0) { hasNonZero = true; break; }
+                        if (TryParseDec(fd.NetGlobeIncome, out var ni) && ni != 0) { hasNonZero = true; break; }
+                        if (TryParseDec(fd.Fanil, out var fa) && fa != 0) { hasNonZero = true; break; }
+                    }
+                    if (!hasNonZero && dm.Average != null)
+                    {
+                        if (TryParseDec(dm.Average.Revenue, out var ar) && ar != 0) hasNonZero = true;
+                        else if (TryParseDec(dm.Average.GlobeRevenue, out var agr) && agr != 0) hasNonZero = true;
+                        else if (TryParseDec(dm.Average.NetGlobeIncome, out var ani) && ani != 0) hasNonZero = true;
+                        else if (TryParseDec(dm.Average.Fanil, out var afa) && afa != 0) hasNonZero = true;
+                    }
+
+                    if (!hasNonZero)
+                        errors.Add(
+                            $"[데이터경고] [{jur}] Deminimis 세이프하버({dm.Basis})을 선택했으나 FinancialData/Average 모두 0임. CbCR/회계 수치를 확인하세요."
+                        );
+                }
+            }
         }
 
         #region MessageSpec (60001, 60003)
@@ -796,6 +837,17 @@ namespace GlobeMapper.Services
                     foreach (var tin in ce.Id.Tin)
                         ValidateSingleTin(tin, $"1.3.2.1 구성기업/CE '{ceName}'", false, errors);
 
+                    // OwnershipChange.PreOwnership.Tin도 검증 (1.3.3 시트 입력)
+                    foreach (var change in ce.OwnershipChange)
+                        foreach (var preOwn in change.PreOwnership)
+                            if (preOwn.Tin != null)
+                                ValidateSingleTin(
+                                    preOwn.Tin,
+                                    $"1.3.3 기업구조변동/CE '{ceName}'/PreOwnership",
+                                    false,
+                                    errors
+                                );
+
                     // 70005: GIR316/GIR318이 아닌 CE TIN에도 NOTIN 불가
                     bool isNonGroupOrExited =
                         ce.Id?.GlobeStatus?.Any(s =>
@@ -891,6 +943,18 @@ namespace GlobeMapper.Services
                 {
                     errors.Add(
                         $"[70007] [{context}] TypeOfTIN=GIR3003의 TIN 형식이 올바르지 않습니다. 형식: P2[국가코드2자][날짜8자][그룹코드3자][고유번호3자] (현재: '{tin.Value}')"
+                    );
+                }
+            }
+
+            // [형식경고] TIN이 회사명/문장처럼 보이면 경고 (NOTIN 제외)
+            // 일반 TIN은 영숫자 + 하이픈/점/슬래시만 사용. 공백·소문자단어는 회사명일 가능성 큼.
+            if (!isNoTin && !string.IsNullOrEmpty(tin.Value))
+            {
+                if (!Regex.IsMatch(tin.Value, @"^[A-Za-z0-9._\-/]+$"))
+                {
+                    errors.Add(
+                        $"[형식경고] [{context}] TIN '{tin.Value}'에 공백/특수문자가 포함됨. 회사명을 입력했는지 확인하세요."
                     );
                 }
             }

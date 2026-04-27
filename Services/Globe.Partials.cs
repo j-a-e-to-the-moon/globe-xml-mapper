@@ -2,28 +2,18 @@
 // decimal 기본값 0이 항상 serialize됨. ShouldSerialize* 메서드로 억제.
 //
 // XmlSerializer 규약: public bool ShouldSerializeXxx() → false 반환 시 Xxx 요소 생략.
+//
+// ⚠️ XSD [R] 필수 필드는 ShouldSerialize 정의하지 않음 (0이라도 emit 필요).
+//   - OverallComputation.TopUpTaxPercentage [R]
+//   - SubstanceExclusion.PayrollMarkUp / TangibleAssetMarkup [R] (parent emit 시)
+//   → 이 필드들은 emit 강제 (XSD 검증 통과 보장)
 
 namespace Globe
 {
-    public partial class EtrComputationTypeOverallComputation
-    {
-        // 추가세액비율(TopUpTaxPercentage): 0이면 미기재로 취급
-        public bool ShouldSerializeTopUpTaxPercentage() => TopUpTaxPercentage != 0m;
-    }
-
-    public partial class EtrComputationTypeOverallComputationSubstanceExclusion
-    {
-        // 인건비 반영비율: 0이면 미기재로 취급
-        public bool ShouldSerializePayrollMarkUp() => PayrollMarkUp != 0m;
-
-        // 유형자산 반영비율: 0이면 미기재로 취급
-        public bool ShouldSerializeTangibleAssetMarkup() => TangibleAssetMarkup != 0m;
-    }
-
     public partial class EtrComputationTypeOverallComputationAdjustedCoveredTaxDeferTaxAdjustAmtTransition
     {
         // Year: DateTime default(0001-01-01)이면 사용자 입력 없음 → 직렬화 생략
-        // XSD상 required지만 실무상 미기재 허용
+        // XSD상 required지만 실무상 미기재 허용 (Transition 자체가 optional이라 부모 안 만들면 됨)
         public bool ShouldSerializeYear() => Year != default;
     }
 

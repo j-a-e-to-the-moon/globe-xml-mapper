@@ -188,16 +188,10 @@ namespace GlobeMapper.Services
                     break;
                 case "Ce.Qutpr.AggOwnership":
                     ce.Qutpr ??= new Globe.CorporateStructureTypeCeQutpr();
-                    if (
-                        decimal.TryParse(
-                            val.TrimEnd('%').Trim(),
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out var agg
-                        )
-                    )
+                    var agg = ParsePercentage(val);
+                    if (agg.HasValue)
                     {
-                        ce.Qutpr.AggOwnership = agg > 1m ? agg / 100m : agg;
+                        ce.Qutpr.AggOwnership = agg.Value;
                         ce.Qutpr.AggOwnershipSpecified = true;
                     }
                     break;
@@ -280,18 +274,9 @@ namespace GlobeMapper.Services
                 // [4] 지분 (0~1 또는 % 단위)
                 if (parts.Length >= 5 && !string.IsNullOrEmpty(parts[4]))
                 {
-                    var pctClean = parts[4].TrimEnd('%').Trim();
-                    if (
-                        decimal.TryParse(
-                            pctClean,
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out var pct
-                        )
-                    )
-                    {
-                        ownership.OwnershipPercentage = pct > 1m ? pct / 100m : pct;
-                    }
+                    var pct = ParsePercentage(parts[4]);
+                    if (pct.HasValue)
+                        ownership.OwnershipPercentage = pct.Value;
                 }
 
                 ce.Ownership.Add(ownership);

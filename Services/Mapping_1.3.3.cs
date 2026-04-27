@@ -7,12 +7,12 @@ namespace GlobeMapper.Services
 {
     /// <summary>
     /// 1.3.3 기업구조 변동 — CorporateStructureTypeCeOwnershipChange 매핑.
-    /// 행 반복 방식: 6행부터 데이터, blockCount로 행 수 결정.
+    /// 컬럼 헤더("1. 구성기업") 다음 행부터 데이터로 iteration.
     /// 각 행을 CE.OwnershipChange에 추가 (CE는 1.3.2.1에서 이미 생성된 것 참조).
     /// </summary>
     public class Mapping_1_3_3 : MappingBase
     {
-        private const int DATA_START_ROW = 6;
+        private const string COLUMN_HEADER_ANCHOR = "1. 구성기업"; // B열 컬럼헤더
 
         public Mapping_1_3_3()
             : base(null) { }
@@ -29,9 +29,12 @@ namespace GlobeMapper.Services
                 new Globe.CorporateStructureType();
             var cs = globe.GlobeBody.GeneralSection.CorporateStructure;
 
-            var lastRow = ws.LastRowUsed()?.RowNumber() ?? DATA_START_ROW;
+            var headerRow = FindAnchorRow(ws, COLUMN_HEADER_ANCHOR);
+            if (headerRow < 0) return;
+            var dataStartRow = headerRow + 1;
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? dataStartRow;
 
-            for (int row = DATA_START_ROW; row <= lastRow; row++)
+            for (int row = dataStartRow; row <= lastRow; row++)
             {
                 // B: 구성기업 상호 (표시용, 매칭은 D열 TIN 기준)
                 var name = ws.Cell(row, 2).GetString()?.Trim();
@@ -66,7 +69,7 @@ namespace GlobeMapper.Services
 
                 if (!string.IsNullOrEmpty(dateRaw))
                 {
-                    if (DateTime.TryParse(dateRaw, out var changeDate))
+                    if (TryParseDate(dateRaw, out var changeDate))
                         change.ChangeDate = changeDate;
                     else
                         errors.Add(
@@ -112,16 +115,9 @@ namespace GlobeMapper.Services
                             );
                     }
 
-                    if (
-                        !string.IsNullOrEmpty(prePctRaw)
-                        && decimal.TryParse(
-                            prePctRaw.TrimEnd('%').Trim(),
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out var prePct
-                        )
-                    )
-                        preOwn.PreOwnershipPercentage = prePct > 1m ? prePct / 100m : prePct;
+                    var prePct = ParsePercentage(prePctRaw);
+                    if (prePct.HasValue)
+                        preOwn.PreOwnershipPercentage = prePct.Value;
 
                     change.PreOwnership.Add(preOwn);
                 }
@@ -137,6 +133,18 @@ namespace GlobeMapper.Services
         {
             var tinValue = tinRaw.Split(',')[0].Trim();
             return cs.Ce.FirstOrDefault(c => c.Id?.Tin.Any(t => t.Value == tinValue) == true);
+        }
+
+        // B열에서 anchor 텍스트를 포함하는 첫 행 반환 (-1 = 없음).
+        private static int FindAnchorRow(IXLWorksheet ws, string contains)
+        {
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 200;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var v = ws.Cell(r, 2).GetString() ?? "";
+                if (v.Contains(contains)) return r;
+            }
+            return -1;
         }
     }
 }

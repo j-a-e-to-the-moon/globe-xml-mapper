@@ -5,8 +5,8 @@ using ClosedXML.Excel;
 namespace GlobeMapper.Services
 {
     /// <summary>
-    /// "기업매핑" 시트 리더.
-    /// 헤더: B=기업 TIN / C=국가명 / D=하위그룹 유형 / E=하위그룹 최상위기업 TIN
+    /// "구성기업" 시트 리더.
+    /// 헤더(3행): D=기업 TIN / E=국가명 / F=하위그룹 유형 / H=하위그룹 최상위기업 TIN
     ///
     /// 구성기업(entity) TIN으로 합산단위(group) 식별자를 조회:
     ///   entityTin → (country, subGroupTypes[], subGroupTin)
@@ -28,16 +28,16 @@ namespace GlobeMapper.Services
         public static EntityGroupMap Load(IXLWorkbook workbook, List<string> errors = null)
         {
             var map = new EntityGroupMap();
-            if (!workbook.TryGetWorksheet("기업매핑", out var ws))
+            if (!workbook.TryGetWorksheet("구성기업", out var ws))
                 return map;
 
-            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 2;
-            for (int r = 3; r <= lastRow; r++)
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 3;
+            for (int r = 4; r <= lastRow; r++)
             {
-                var tin = ws.Cell(r, 2).GetString()?.Trim();
-                var country = ws.Cell(r, 3).GetString()?.Trim();
-                var sgType = ws.Cell(r, 4).GetString()?.Trim();
-                var sgTin = ws.Cell(r, 5).GetString()?.Trim();
+                var tin = ws.Cell(r, 4).GetString()?.Trim();   // D열
+                var country = ws.Cell(r, 5).GetString()?.Trim(); // E열
+                var sgType = ws.Cell(r, 6).GetString()?.Trim(); // F열
+                var sgTin = ws.Cell(r, 8).GetString()?.Trim();  // H열
 
                 if (string.IsNullOrEmpty(tin))
                     continue;
@@ -52,7 +52,7 @@ namespace GlobeMapper.Services
                 }
                 else if (!string.IsNullOrEmpty(country))
                 {
-                    errors?.Add($"[기업매핑 R{r}] 국가코드 '{country}' 파싱 실패");
+                    errors?.Add($"[구성기업 R{r}] 국가코드 '{country}' 파싱 실패");
                 }
 
                 map._byEntityTin[tin] = new Entry

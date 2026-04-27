@@ -5,7 +5,7 @@ using ClosedXML.Excel;
 namespace GlobeMapper.Services
 {
     /// <summary>
-    /// main_template.xlsx "구성기업 계산" 시트 → CEComputation 매핑.
+    /// main_template_newest.xlsx "구성기업 계산" 시트 → CEComputation 매핑.
     /// </summary>
     public class Mapping_EntityCe : MappingBase
     {
@@ -15,6 +15,8 @@ namespace GlobeMapper.Services
         // 현재 처리 중인 블록 범위 (FindRow 스코프)
         private int _blockStart = 1;
         private int _blockEnd = -1;
+        // 시트 전역에 1번만 존재하는 헤더 캐시 (다중 CE 블록 시 모든 CE에 동일 적용)
+        private int _globalSimplCalcRow = -1;
 
         public override void Map(
             IXLWorksheet ws,
@@ -23,8 +25,12 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
-            // 기업매핑 로드 (main_template.xlsx의 "기업매핑" 시트)
+            // 구성기업 시트 로드
             var groupMap = EntityGroupMap.Load(ws.Workbook, errors);
+
+            // 시트 최상단(블록 외부)에 1번만 있는 헤더 위치 캐시
+            // FindRow는 _blockStart 스코프라 두 번째 이상 블록에서는 못 찾기 때문
+            _globalSimplCalcRow = FindRowGlobal(ws, "1. 귀 다국적기업그룹은");
 
             // 세로 스택된 entity 블록 모두 찾기
             var blockStarts = FindAllEntityBlockStarts(ws);
@@ -41,6 +47,19 @@ namespace GlobeMapper.Services
 
             _blockStart = 1;
             _blockEnd = -1;
+            _globalSimplCalcRow = -1;
+        }
+
+        // 블록 스코프 무시하고 시트 전역에서 헤더 검색.
+        private static int FindRowGlobal(IXLWorksheet ws, string contains)
+        {
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 300;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var v = ws.Cell(r, 2).GetString() ?? "";
+                if (v.Contains(contains)) return r;
+            }
+            return -1;
         }
 
         /// <summary>
@@ -101,7 +120,7 @@ namespace GlobeMapper.Services
                 else
                 {
                     errors.Add(
-                        $"[{fileName}] [블록 R{_blockStart}] 기업매핑에 TIN '{ceTin.Value}' 있으나 국가 미지정"
+                        $"[{fileName}] [블록 R{_blockStart}] 구성기업 시트에 TIN '{ceTin.Value}' 있으나 국가 미지정"
                     );
                     return;
                 }
@@ -114,7 +133,7 @@ namespace GlobeMapper.Services
             else
             {
                 errors.Add(
-                    $"[{fileName}] [블록 R{_blockStart}] CE TIN '{ceTin.Value}' 이 기업매핑에 없음 + 발급국가도 없음"
+                    $"[{fileName}] [블록 R{_blockStart}] CE TIN '{ceTin.Value}' 이 구성기업 시트에 없음 + 발급국가도 없음"
                 );
                 return;
             }
@@ -205,6 +224,8 @@ namespace GlobeMapper.Services
         }
 
         // ─── 3.2.4(a): row에서 K열 여/부 → Elections.SimplCalculations ──
+        // "1. 귀 다국적기업그룹은…" 헤더는 시트 최상단에 1번만 존재.
+        // _globalSimplCalcRow 캐시로 다중 CE 블록에서도 동일 값 적용.
         private void Map324a(
             IXLWorksheet ws,
             Globe.EtrComputationTypeCeComputation ceComp,
@@ -212,10 +233,9 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
-            var r = FindRow(ws, "1. 귀 다국적기업그룹은");
-            if (r < 0)
+            if (_globalSimplCalcRow < 0)
                 return;
-            var v = ws.Cell(r, 15).GetString()?.Trim(); // O열 (O4)
+            var v = ws.Cell(_globalSimplCalcRow, 15).GetString()?.Trim(); // O열 (O4)
             if (string.IsNullOrEmpty(v))
                 return;
 
@@ -329,7 +349,7 @@ namespace GlobeMapper.Services
                 {
                     var adds = ws.Cell(rAdjHdr + 1 + i, 15).GetString()?.Trim(); // O: 가산액
                     var reds = ws.Cell(rAdjHdr + 1 + i, 17).GetString()?.Trim(); // Q: 차감액
-                    if (string.IsNullOrEmpty(adds) && string.IsNullOrEmpty(reds))
+                    if (!HasNonZeroValue(adds) && !HasNonZeroValue(reds))
                         continue;
 
                     ceComp.AdjustedCoveredTax ??=
@@ -339,9 +359,9 @@ namespace GlobeMapper.Services
                     {
                         AdjustmentItem = TaxAdjustmentItems[i],
                     };
-                    if (!string.IsNullOrEmpty(adds))
+                    if (HasNonZeroValue(adds))
                         adj.Amount.Add(adds);
-                    if (!string.IsNullOrEmpty(reds))
+                    if (HasNonZeroValue(reds))
                         adj.Amount.Add("-" + reds);
                     ceComp.AdjustedCoveredTax.Adjustments.Add(adj);
                 }
@@ -422,9 +442,9 @@ namespace GlobeMapper.Services
                 item.Basis.Add(basis);
                 if (!string.IsNullOrEmpty(otherTinRaw))
                     item.OtherTin = ParseTin(otherTinRaw);
-                if (!string.IsNullOrEmpty(adds))
+                if (HasNonZeroValue(adds))
                     item.Additions = adds;
-                if (!string.IsNullOrEmpty(reds))
+                if (HasNonZeroValue(reds))
                     item.Reductions = reds;
 
                 var ccRaw = ws.Cell(r, 10).GetString()?.Trim(); // J: 소재지국 (J4)
@@ -499,7 +519,7 @@ namespace GlobeMapper.Services
                 {
                     var adds = ws.Cell(rAdjHdr + 1 + i, 15).GetString()?.Trim(); // O: 가산액
                     var reds = ws.Cell(rAdjHdr + 1 + i, 17).GetString()?.Trim(); // Q: 차감액
-                    if (string.IsNullOrEmpty(adds) && string.IsNullOrEmpty(reds))
+                    if (!HasNonZeroValue(adds) && !HasNonZeroValue(reds))
                         continue;
 
                     var adj =
@@ -507,9 +527,9 @@ namespace GlobeMapper.Services
                         {
                             AdjustmentItem = DeferredTaxAdjItems[i],
                         };
-                    if (!string.IsNullOrEmpty(adds))
+                    if (HasNonZeroValue(adds))
                         adj.Amount.Add(adds);
-                    if (!string.IsNullOrEmpty(reds))
+                    if (HasNonZeroValue(reds))
                         adj.Amount.Add("-" + reds);
                     adjItems[DeferredTaxAdjItems[i]] = adj;
                 }
@@ -575,11 +595,12 @@ namespace GlobeMapper.Services
             if (rTotal >= 0)
                 totalVal = ws.Cell(rTotal, 15).GetString()?.Trim(); // O86
 
-            // 값이 하나라도 있으면 DeferTaxAdjustAmt 생성
+            // 의미 있는 값이 있을 때만 DeferTaxAdjustAmt 생성
+            // Total=0만 있고 expense/adjustments 없으면 빈 구조체이므로 스킵
             if (
-                !string.IsNullOrEmpty(deferExpenseVal)
+                HasNonZeroValue(deferExpenseVal)
                 || adjItems.Count > 0
-                || !string.IsNullOrEmpty(totalVal)
+                || HasNonZeroValue(totalVal)
             )
             {
                 ceComp.AdjustedCoveredTax ??=
@@ -664,7 +685,7 @@ namespace GlobeMapper.Services
                 {
                     var adds = ws.Cell(rAdjHdr + 1 + i, 13).GetString()?.Trim(); // M: 가산액
                     var reds = ws.Cell(rAdjHdr + 1 + i, 16).GetString()?.Trim(); // P: 차감액
-                    if (string.IsNullOrEmpty(adds) && string.IsNullOrEmpty(reds))
+                    if (!HasNonZeroValue(adds) && !HasNonZeroValue(reds))
                         continue;
 
                     ceComp.NetGlobeIncome ??=
@@ -674,9 +695,9 @@ namespace GlobeMapper.Services
                     {
                         AdjustmentItem = AdjustmentItems[i],
                     };
-                    if (!string.IsNullOrEmpty(adds))
+                    if (HasNonZeroValue(adds))
                         adj.Amount.Add(adds);
-                    if (!string.IsNullOrEmpty(reds))
+                    if (HasNonZeroValue(reds))
                         adj.Amount.Add("-" + reds);
                     ceComp.NetGlobeIncome.Adjustments.Add(adj);
                 }
@@ -826,8 +847,8 @@ namespace GlobeMapper.Services
                     {
                         Basis = basis,
                         OtherTin = ParseTin(otherTinRaw ?? ""),
-                        Additions = adds,
-                        Reductions = reds,
+                        Additions = HasNonZeroValue(adds) ? adds : null,
+                        Reductions = HasNonZeroValue(reds) ? reds : null,
                     };
 
                 var ccRaw = ws.Cell(r, 9).GetString()?.Trim(); // I: 소재지국 (I4)
@@ -931,19 +952,9 @@ namespace GlobeMapper.Services
                 new Globe.EtrComputationTypeCeComputationAdjustedFanilAdjustmentUpeAdjustmentsIdentificationOfOwners();
 
             // K열: 직접보유비율(%)
-            if (!string.IsNullOrEmpty(pctRaw))
-            {
-                var pctClean = pctRaw.TrimEnd('%').Trim();
-                if (
-                    decimal.TryParse(
-                        pctClean,
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var pct
-                    )
-                )
-                    owner.OwnershipPercentage = pct > 1m ? pct / 100m : pct;
-            }
+            var pct = ParsePercentage(pctRaw);
+            if (pct.HasValue)
+                owner.OwnershipPercentage = pct.Value;
 
             if (string.IsNullOrEmpty(ownerRaw))
                 return owner;
@@ -968,19 +979,14 @@ namespace GlobeMapper.Services
                     ind.ResCountryCode = cc;
                     ind.ResCountryCodeSpecified = true;
                 }
-                if (
-                    parts.Length > 3
-                    && !string.IsNullOrEmpty(parts[3].Trim())
-                    && decimal.TryParse(
-                        parts[3].Trim(),
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var rate
-                    )
-                )
+                if (parts.Length > 3)
                 {
-                    ind.TaxRate = rate > 1m ? rate / 100m : rate;
-                    ind.TaxRateSpecified = true;
+                    var rate = ParsePercentage(parts[3]);
+                    if (rate.HasValue)
+                    {
+                        ind.TaxRate = rate.Value;
+                        ind.TaxRateSpecified = true;
+                    }
                 }
                 owner.IndOwners = ind;
             }
@@ -1003,19 +1009,14 @@ namespace GlobeMapper.Services
                         ResCountryCode = tin.IssuedBySpecified ? tin.IssuedBy : default,
                     };
                 // parts[4]: 세율 (빈 문자열이면 스킵)
-                if (
-                    parts.Length > 4
-                    && !string.IsNullOrEmpty(parts[4].Trim())
-                    && decimal.TryParse(
-                        parts[4].Trim(),
-                        System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var rate
-                    )
-                )
+                if (parts.Length > 4)
                 {
-                    entity.TaxRate = rate > 1m ? rate / 100m : rate;
-                    entity.TaxRateSpecified = true;
+                    var rate = ParsePercentage(parts[4]);
+                    if (rate.HasValue)
+                    {
+                        entity.TaxRate = rate.Value;
+                        entity.TaxRateSpecified = true;
+                    }
                 }
                 // parts[5]: ExTypeOfEntity (세율 스킵해도 파싱)
                 if (
@@ -1300,34 +1301,80 @@ namespace GlobeMapper.Services
             ceComp.NetGlobeIncome ??= new Globe.EtrComputationTypeCeComputationNetGlobeIncome();
             var ngi = ceComp.NetGlobeIncome;
 
-            ngi.IntShippingIncome =
+            var shipping =
                 new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncome
                 {
-                    InternationalShipIncome =
-                        new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncomeInternationalShipIncome
-                        {
-                            Total = intTotal,
-                            Revenue = intRevenue,
-                            Costs = intCosts,
-                        },
-                    QualifiedAncShipIncome =
-                        new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncomeQualifiedAncShipIncome
-                        {
-                            Total = ancTotal,
-                            Revenue = ancRevenue,
-                            Costs = ancCosts,
-                        },
-                    SubstanceExclusion =
-                        new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncomeSubstanceExclusion
-                        {
-                            PayrollCosts = payroll,
-                            TangibleAssets = tangible,
-                        },
-                    CoveredTaxes = covTaxes,
+                    CoveredTaxes = NullIfEmpty(covTaxes),
                 };
 
-            // 국제해운소득 유형(Category) — GIR 코드 추출 (구분자 무관: 쉼표/마침표/공백 등)
-            if (!string.IsNullOrEmpty(intCatRaw))
+            // InternationalShipIncome — 실질 소득 데이터(Total/Revenue/Costs)가 있을 때만 생성
+            // XSD상 Total/Category/Revenue/Costs 모두 required이므로 일부만 있으면 안 됨.
+            // Category만 있고 income 없으면 사용자 입력 미완성으로 간주, 생략.
+            bool hasIntIncome = HasNonZeroValue(intTotal) || HasNonZeroValue(intRevenue) || HasNonZeroValue(intCosts);
+            if (hasIntIncome)
+            {
+                shipping.InternationalShipIncome =
+                    new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncomeInternationalShipIncome
+                    {
+                        Total = NullIfEmpty(intTotal),
+                        Revenue = NullIfEmpty(intRevenue),
+                        Costs = NullIfEmpty(intCosts),
+                    };
+            }
+            else if (!string.IsNullOrEmpty(intCatRaw))
+            {
+                errors.Add(
+                    $"[{fileName}] 3.2.4.4 국제해운소득 유형('{intCatRaw}')은 입력됐으나 Total/Revenue/Costs가 없어 생략됨"
+                );
+            }
+
+            // QualifiedAncShipIncome — 동일 규칙
+            bool hasAncIncome = HasNonZeroValue(ancTotal) || HasNonZeroValue(ancRevenue) || HasNonZeroValue(ancCosts);
+            if (hasAncIncome)
+            {
+                shipping.QualifiedAncShipIncome =
+                    new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncomeQualifiedAncShipIncome
+                    {
+                        Total = NullIfEmpty(ancTotal),
+                        Revenue = NullIfEmpty(ancRevenue),
+                        Costs = NullIfEmpty(ancCosts),
+                    };
+            }
+            else if (!string.IsNullOrEmpty(ancCatRaw))
+            {
+                errors.Add(
+                    $"[{fileName}] 3.2.4.4 적격국제해운부수소득 유형('{ancCatRaw}')은 입력됐으나 Total/Revenue/Costs가 없어 생략됨"
+                );
+            }
+
+            // SubstanceExclusion — 0이 아닌 의미있는 값이 있을 때만 생성
+            if (HasNonZeroValue(payroll) || HasNonZeroValue(tangible))
+            {
+                shipping.SubstanceExclusion =
+                    new Globe.EtrComputationTypeCeComputationNetGlobeIncomeIntShippingIncomeSubstanceExclusion
+                    {
+                        PayrollCosts = NullIfEmpty(payroll),
+                        TangibleAssets = NullIfEmpty(tangible),
+                    };
+            }
+
+            // 모든 부분구조가 비어있으면 IntShippingIncome 자체 생략
+            if (
+                shipping.InternationalShipIncome == null
+                && shipping.QualifiedAncShipIncome == null
+                && shipping.SubstanceExclusion == null
+                && string.IsNullOrEmpty(shipping.CoveredTaxes)
+            )
+                return;
+
+            // CoveredTaxes는 XSD required — 빈 값이면 "0" 기본값
+            if (string.IsNullOrEmpty(shipping.CoveredTaxes))
+                shipping.CoveredTaxes = "0";
+
+            ngi.IntShippingIncome = shipping;
+
+            // 국제해운소득 유형(Category) — InternationalShipIncome 생성된 경우만 추가
+            if (!string.IsNullOrEmpty(intCatRaw) && shipping.InternationalShipIncome != null)
             {
                 var intCodes = System.Text.RegularExpressions.Regex.Matches(intCatRaw, @"GIR\d+");
                 if (intCodes.Count == 0)
@@ -1337,7 +1384,7 @@ namespace GlobeMapper.Services
                 foreach (System.Text.RegularExpressions.Match m in intCodes)
                 {
                     if (TryParseEnum<Globe.IntShipCategoryEnumType>(m.Value, out var cat))
-                        ngi.IntShippingIncome.InternationalShipIncome.Category.Add(cat);
+                        shipping.InternationalShipIncome.Category.Add(cat);
                     else
                         errors.Add(
                             $"[{fileName}] 3.2.4.4 국제해운소득 유형 파싱 실패: '{m.Value}' (GIR2101~GIR2106)"
@@ -1345,12 +1392,12 @@ namespace GlobeMapper.Services
                 }
             }
 
-            // 적격국제해운부수소득 유형(Category) — 단일 선택
-            if (!string.IsNullOrEmpty(ancCatRaw))
+            // 적격국제해운부수소득 유형(Category) — QualifiedAncShipIncome 생성된 경우만 설정
+            if (!string.IsNullOrEmpty(ancCatRaw) && shipping.QualifiedAncShipIncome != null)
             {
                 if (TryParseEnum<Globe.AncShipCategoryEnumType>(ancCatRaw, out var ancCat))
                 {
-                    ngi.IntShippingIncome.QualifiedAncShipIncome.Category = ancCat;
+                    shipping.QualifiedAncShipIncome.Category = ancCat;
                 }
                 else
                     errors.Add(
@@ -1421,26 +1468,17 @@ namespace GlobeMapper.Services
 
                 if (!string.IsNullOrEmpty(nRaw))
                 {
-                    if (
-                        decimal.TryParse(
-                            nRaw,
-                            System.Globalization.NumberStyles.Any,
-                            System.Globalization.CultureInfo.InvariantCulture,
-                            out var share
-                        )
-                    )
-                        a76.ShareOfUndistNetGlobeInc = share;
+                    var share = ParsePercentage(nRaw);
+                    if (share.HasValue)
+                        a76.ShareOfUndistNetGlobeInc = share.Value;
                     else
-                        errors.Add($"[{fileName}] 3.2.4.5 지분율 파싱 실패: '{nRaw}' (0~1 소수)");
+                        errors.Add($"[{fileName}] 3.2.4.5 지분율 형식 오류: '{nRaw}' (0~1 사이 decimal 입력, 예: 0.5)");
                 }
 
                 if (!string.IsNullOrEmpty(eRaw))
                 {
-                    var invTin = ParseTin(eRaw);
-                    if (invTin != null)
-                        a76.InvestmentEntityTin = invTin;
-                    else
-                        errors.Add($"[{fileName}] 3.2.4.5 투자기업 TIN 파싱 실패: '{eRaw}'");
+                    // ParseTin은 항상 비-null 반환 (빈 입력은 NoTin)
+                    a76.InvestmentEntityTin = ParseTin(eRaw);
                 }
 
                 el.Art76.Add(a76);
@@ -1624,12 +1662,7 @@ namespace GlobeMapper.Services
                 }
 
                 // 소득산입비율 (decimal)
-                decimal.TryParse(
-                    incRatio,
-                    System.Globalization.NumberStyles.Any,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var inclusionRatio
-                );
+                var inclusionRatio = ParsePercentage(incRatio) ?? 0m;
 
                 iir.ParentEntity.Add(
                     new Globe.LowTaxJurisdictionTypeLtceIirParentEntity

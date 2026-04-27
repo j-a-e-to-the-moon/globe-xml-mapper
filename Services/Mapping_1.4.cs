@@ -6,11 +6,11 @@ namespace GlobeMapper.Services
 {
     /// <summary>
     /// 1.4 글로벌최저한세 정보 요약 — Summary Collection에 매핑.
-    /// 행 반복 방식: 4행부터 데이터, blockCount로 행 수 결정.
+    /// 컬럼 헤더("1. 소재지국") 다음 행부터 데이터로 iteration.
     /// </summary>
     public class Mapping_1_4 : MappingBase
     {
-        private const int DATA_START_ROW = 4;
+        private const string COLUMN_HEADER_ANCHOR = "1. 소재지국"; // B열 컬럼헤더
 
         public Mapping_1_4()
             : base(null) { }
@@ -22,9 +22,12 @@ namespace GlobeMapper.Services
             string fileName
         )
         {
-            var lastRow = ws.LastRowUsed()?.RowNumber() ?? DATA_START_ROW;
+            var headerRow = FindAnchorRow(ws, COLUMN_HEADER_ANCHOR);
+            if (headerRow < 0) return;
+            var dataStartRow = headerRow + 1;
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? dataStartRow;
 
-            for (int row = DATA_START_ROW; row <= lastRow; row++)
+            for (int row = dataStartRow; row <= lastRow; row++)
             {
                 var summary = new Globe.GlobeBodyTypeSummary();
                 summary.Jurisdiction = new Globe.SummaryTypeJurisdiction();
@@ -189,6 +192,18 @@ namespace GlobeMapper.Services
                 )
                     globe.GlobeBody.Summary.Add(summary);
             }
+        }
+
+        // B열에서 anchor 텍스트를 포함하는 첫 행 반환 (-1 = 없음).
+        private static int FindAnchorRow(IXLWorksheet ws, string contains)
+        {
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 200;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var v = ws.Cell(r, 2).GetString() ?? "";
+                if (v.Contains(contains)) return r;
+            }
+            return -1;
         }
     }
 }

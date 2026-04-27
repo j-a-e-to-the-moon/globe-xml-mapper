@@ -8,8 +8,29 @@ namespace GlobeMapper
 {
     public class MainForm : Form
     {
-        private static readonly string TemplatePath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "Resources", "main_template.xlsx");
+        private static readonly string TemplatePath = ResolveTemplatePath();
+
+        private static string ResolveTemplatePath()
+        {
+            var resDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+            try
+            {
+                var cfgPath = Path.Combine(resDir, "config.json");
+                if (File.Exists(cfgPath))
+                {
+                    var json = File.ReadAllText(cfgPath, System.Text.Encoding.UTF8);
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("templateFileName", out var prop))
+                    {
+                        var name = prop.GetString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                            return Path.Combine(resDir, name);
+                    }
+                }
+            }
+            catch { }
+            return Path.Combine(resDir, "main_template_newest.xlsx");
+        }
 
         // ── 색상 상수 ──────────────────────────────────────────────────────
         private static readonly Color BG          = Color.FromArgb(28, 28, 30);
@@ -258,7 +279,7 @@ namespace GlobeMapper
             using var openDlg = new OpenFileDialog
             {
                 Filter = "Excel 파일 (*.xlsx)|*.xlsx",
-                Title  = "변환할 main_template.xlsx 파일을 선택하세요.",
+                Title  = "변환할 main_template_newest.xlsx 파일을 선택하세요.",
             };
             if (openDlg.ShowDialog() != DialogResult.OK) return;
             var mainFilePath = openDlg.FileName;
@@ -272,8 +293,12 @@ namespace GlobeMapper
             };
             if (saveDlg.ShowDialog() != DialogResult.OK) return;
 
+            using var logger = new Services.AppLogger();
             try
             {
+                logger.WriteLine($"입력: {mainFilePath}");
+                logger.WriteLine($"출력: {saveDlg.FileName}");
+
                 var globe = new Globe.GlobeOecd
                 {
                     Version     = "2.0",
@@ -283,11 +308,19 @@ namespace GlobeMapper
 
                 var orchestrator  = new MappingOrchestrator();
                 var mappingErrors = orchestrator.MapWorkbook(mainFilePath, globe);
+                logger.WriteLine($"매핑 완료 — 오류 {mappingErrors.Count}건");
+                if (mappingErrors.Count > 0)
+                    logger.WriteLines(mappingErrors, "매핑 오류:");
 
                 var xml = XmlExportService.Serialize(globe);
                 File.WriteAllText(saveDlg.FileName, xml, System.Text.Encoding.UTF8);
+                logger.WriteLine("XML 직렬화 완료");
 
                 var validationErrors = ValidationUtil.Validate(globe);
+                logger.WriteLine($"검증 완료 — 오류 {validationErrors.Count}건");
+                if (validationErrors.Count > 0)
+                    logger.WriteLines(validationErrors, "검증 오류:");
+
                 var errorsPath = Path.ChangeExtension(saveDlg.FileName, ".errors.txt");
 
                 if (mappingErrors.Count > 0 || validationErrors.Count > 0)
@@ -310,7 +343,21 @@ namespace GlobeMapper
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
-            catch (Exception ex) { ShowError($"XML 변환 오류:\n{ex.Message}"); }
+            catch (Exception ex)
+            {
+                logger.WriteException(ex, "변환 중 예외 발생");
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("XML 변환 오류:");
+                var ex2 = ex;
+                while (ex2 != null)
+                {
+                    sb.AppendLine(ex2.Message);
+                    ex2 = ex2.InnerException;
+                    if (ex2 != null) sb.AppendLine("→ 원인:");
+                }
+                sb.AppendLine($"\n로그: {logger.LogPath}");
+                ShowError(sb.ToString());
+            }
         }
 
         private static void ShowError(string msg) =>

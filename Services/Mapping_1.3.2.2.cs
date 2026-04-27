@@ -5,13 +5,14 @@ namespace GlobeMapper.Services
 {
     public class Mapping_1_3_2_2 : MappingBase
     {
-        // BlockService / ControlPanelForm의 EX_BLOCK 상수와 동일하게 유지
-        private const int BLOCK_START = 2; // 헤더 포함 블록 첫 행
-        private const int BLOCK_END = 5; // 블록 마지막 행
-        private const int BLOCK_GAP = 2; // 블록 간 구분 행 수
-        private const int SET_SIZE = BLOCK_END - BLOCK_START + 1 + BLOCK_GAP; // = 6
+        // 동적 탐지: 첫 블록은 "1.3.2.2 제외기업" 헤더로 찾음.
+        // 후속 블록은 SET_SIZE 간격(헤더 1 + 필드 3 + 빈 2 = 6행)으로 반복.
+        private const string BLOCK_ANCHOR = "1.3.2.2 제외기업";
+        private const int BLOCK_SIZE = 4; // 헤더 + 3 필드 = 4행
+        private const int BLOCK_GAP = 2; // 블록 간 구분 2행
+        private const int SET_SIZE = BLOCK_SIZE + BLOCK_GAP; // = 6
 
-        // 블록 내 상대 오프셋 (BLOCK_START 기준, O열 = 15)
+        // 블록 내 상대 오프셋 (블록 시작 행 기준, O열 = 15)
         // +0 = 헤더행("1.3.2.2 제외기업"), 데이터 없음
         // +1 = 1. 변동 여부
         // +2 = 2. 제외기업 상호
@@ -37,11 +38,14 @@ namespace GlobeMapper.Services
             globe.GlobeBody.GeneralSection.CorporateStructure ??=
                 new Globe.CorporateStructureType();
 
+            var firstBlockStart = FindAnchorRow(ws, BLOCK_ANCHOR);
+            if (firstBlockStart < 0) return;
+
             var lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
 
             for (int n = 0; ; n++)
             {
-                var blockStart = BLOCK_START + n * SET_SIZE;
+                var blockStart = firstBlockStart + n * SET_SIZE;
                 if (blockStart > lastRow)
                     break;
 
@@ -87,6 +91,18 @@ namespace GlobeMapper.Services
                 if (hasData)
                     globe.GlobeBody.GeneralSection.CorporateStructure.ExcludedEntity.Add(entity);
             }
+        }
+
+        // B열에서 anchor 텍스트를 포함하는 첫 행 반환 (-1 = 없음).
+        private static int FindAnchorRow(IXLWorksheet ws, string contains)
+        {
+            var lastRow = ws.LastRowUsed()?.RowNumber() ?? 200;
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var v = ws.Cell(r, 2).GetString() ?? "";
+                if (v.Contains(contains)) return r;
+            }
+            return -1;
         }
     }
 }
